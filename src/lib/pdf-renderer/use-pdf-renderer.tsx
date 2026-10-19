@@ -56,8 +56,13 @@ const RendererWebView = WebView as unknown as ComponentType<{
 const cacheKey = (index: number, width: number, rotation: number) =>
   `${index}:${rotation}:${width}`;
 
-export function usePdfRenderer(base64: string | null): PdfRenderer {
+export function usePdfRenderer(
+  base64: string | null,
+  /** Called each time a document finishes loading successfully. */
+  onLoaded?: (pages: PageInfo[]) => void,
+): PdfRenderer {
   const webView = useRef<WebView>(null);
+  const onLoadedRef = useRef(onLoaded);
   const [ready, setReady] = useState(false);
   const [result, setResult] = useState<LoadResult | null>(null);
   const [generation, setGeneration] = useState(0);
@@ -69,6 +74,10 @@ export function usePdfRenderer(base64: string | null): PdfRenderer {
     new Map<number, { resolve: (uri: string) => void; reject: (error: Error) => void }>(),
   );
   const cache = useRef(new Map<string, string>());
+
+  useEffect(() => {
+    onLoadedRef.current = onLoaded;
+  }, [onLoaded]);
 
   useEffect(() => {
     if (!ready || !base64) return;
@@ -95,6 +104,7 @@ export function usePdfRenderer(base64: string | null): PdfRenderer {
           error: message.type === 'load-error' ? message.message : null,
         });
         setGeneration((g) => g + 1);
+        if (message.type === 'loaded') onLoadedRef.current?.(message.pages);
         break;
       }
       case 'rendered':
