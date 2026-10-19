@@ -3,21 +3,22 @@ import { Stack, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
   Pressable,
   StyleSheet,
   Text,
   useWindowDimensions,
   View,
 } from 'react-native';
+import { FlatList } from 'react-native-gesture-handler';
 
-import { AnnotationLayer } from '@/components/editor/annotation-layer';
-import { PageView } from '@/components/editor/page-view';
+import { PageEditor } from '@/components/editor/page-editor';
+import { Toolbar } from '@/components/editor/toolbar';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { getDocument, readDocumentBase64 } from '@/lib/documents';
-import { rotatedSize } from '@/lib/editor/geometry';
 import { pagesFromSource, useEditorHistory } from '@/lib/editor/history';
+import { defaultToolSettings, isDrawingTool, type ToolSettings } from '@/lib/editor/tools';
+import type { Tool } from '@/lib/editor/types';
 import {
   type PageInfo,
   PdfRendererProvider,
@@ -32,6 +33,10 @@ export default function EditorScreen() {
   const [base64, setBase64] = useState<string | null>(null);
   const history = useEditorHistory();
   const { pages, dispatch } = history;
+  const [tool, setTool] = useState<Tool>('select');
+  const [toolSettings, setToolSettings] = useState(defaultToolSettings);
+  const settings = toolSettings[tool];
+  const setSettings = (next: ToolSettings) => setToolSettings((all) => ({ ...all, [tool]: next }));
 
   const onLoaded = useCallback(
     (info: PageInfo[]) => {
@@ -83,27 +88,29 @@ export default function EditorScreen() {
             data={pages}
             keyExtractor={(page) => page.key}
             contentContainerStyle={styles.list}
+            scrollEnabled={!isDrawingTool(tool)}
             renderItem={({ item }) => {
               const info = renderer.pages[item.sourceIndex];
               if (!info) return null;
-              const size = rotatedSize(info.width, info.height, item.rotation);
-              const height = (pageWidth * size.height) / size.width;
               return (
-                <PageView
-                  sourceIndex={item.sourceIndex}
-                  rotation={item.rotation}
+                <PageEditor
+                  page={item}
+                  info={info}
                   width={pageWidth}
-                  height={height}>
-                  <AnnotationLayer
-                    annotations={item.annotations}
-                    base={info}
-                    rotation={item.rotation}
-                    width={pageWidth}
-                    height={height}
-                  />
-                </PageView>
+                  tool={tool}
+                  settings={settings}
+                  dispatch={dispatch}
+                />
               );
             }}
+          />
+        )}
+        {doc && (
+          <Toolbar
+            tool={tool}
+            settings={settings}
+            onToolChange={setTool}
+            onSettingsChange={setSettings}
           />
         )}
       </View>
