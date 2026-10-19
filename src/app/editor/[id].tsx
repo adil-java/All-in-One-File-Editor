@@ -18,6 +18,7 @@ import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanima
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { PageEditor, type TextRequest } from '@/components/editor/page-editor';
+import { FormPanel } from '@/components/editor/form-panel';
 import { PageManager } from '@/components/editor/page-manager';
 import { SelectionBar } from '@/components/editor/selection-bar';
 import { SignaturePad } from '@/components/editor/signature-pad';
@@ -42,6 +43,7 @@ import { centeredBox, rotatedSize, translate } from '@/lib/editor/geometry';
 import { replaceTextAnnotations } from '@/lib/editor/text-replace';
 import { type Annotation, type EditorPage, makeId, type Tool } from '@/lib/editor/types';
 import { exportPdf } from '@/lib/pdf/export';
+import { applyFormValues, type FormField, type FormValue, readFormFields } from '@/lib/pdf/forms';
 import { A4, appendBlankPage, appendDocument } from '@/lib/pdf/pages';
 import type { Signature } from '@/lib/signatures';
 import {
@@ -81,6 +83,12 @@ export default function EditorScreen() {
   const [signing, setSigning] = useState(false);
   const [visiblePageKey, setVisiblePageKey] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  // Fillable form fields of the current source document.
+  const [formFields, setFormFields] = useState<FormField[]>([]);
+  const [editingForm, setEditingForm] = useState(false);
+  // Form values are written straight into the source, outside undo history.
+  const [formDirty, setFormDirty] = useState(false);
+  const dirty = history.dirty || formDirty;
   const [managingPages, setManagingPages] = useState(false);
   const listRef = useRef<ComponentRef<typeof FlatList<EditorPage>>>(null);
   const navigation = useNavigation();
@@ -110,7 +118,16 @@ export default function EditorScreen() {
       await overwriteDocument(doc.id, bytes);
       setSelection(null);
       dispatch({ type: 'reset', pages: pagesFromSource(pages.length) });
+      setFormDirty(false);
       setBase64(await readDocumentBase64(doc.id));
+    });
+
+  const applyForm = (values: Record<string, FormValue>, flatten: boolean) =>
+    runBusy('Updating form…', async () => {
+      if (!base64) return;
+      setEditingForm(false);
+      setBase64(await applyFormValues(base64, values, { flatten }));
+      setFormDirty(true);
     });
 
   const saveCopy = () =>
@@ -132,7 +149,7 @@ export default function EditorScreen() {
   const share = () =>
     runBusy('Preparing…', async () => {
       if (!doc || !base64) return;
-      if (history.dirty) await shareBytes(doc.name, await exportPdf(base64, pages));
+      if (dirty) await shareBytes(doc.name, await exportPdf(base64, pages));
       else await shareDocument(doc);
     });
 
@@ -207,7 +224,7 @@ export default function EditorScreen() {
 
   // Ask before leaving with unsaved edits. Re-dispatched actions pass through
   // because `leaving` is set first.
-  const preventLeave = history.dirty && !busy;
+  const preventLeave = dirty && !busy;
   const saveRef = useRef(save);
   useEffect(() => {
     saveRef.current = save;
@@ -372,6 +389,22 @@ export default function EditorScreen() {
     if (doc) readDocumentBase64(doc.id).then(setBase64);
   }, [doc]);
 
+  useEffect(() => {
+    if (!base64) return;
+    let cancelled = false;
+    readFormFields(base64)
+      .then((fields) => {
+        if (!cancelled) setFormFields(fields);
+      })
+      // Malformed forms just mean no form panel.
+      .catch(() => {
+        if (!cancelled) setFormFields([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [base64]);
+
   // Zoom re-lays out pages at a larger width (rendered sharply at that size)
   // rather than scaling them, so touch coordinates stay exact while editing.
   const [zoom, setZoom] = useState(1);
@@ -446,11 +479,7 @@ export default function EditorScreen() {
                   disabled={!history.canRedo}
                   onPress={history.redo}
                 />
-                <HeaderButton
-                  icon="save-outline"
-                  disabled={!history.dirty || !!busy}
-                  onPress={save}
-                />
+                <HeaderButton icon="save-outline" disabled={!dirty || !!busy} onPress={save} />
                 <HeaderButton icon="ellipsis-horizontal-circle-outline" onPress={showMore} />
               </View>
             ),
@@ -550,6 +579,15 @@ export default function EditorScreen() {
                 icon: 'file-document-multiple-outline',
                 onPress: () => setManagingPages(true),
               },
+              ...(formFields.length > 0
+                ? [
+                    {
+                      label: `Form (${formFields.length})`,
+                      icon: 'form-select' as const,
+                      onPress: () => setEditingForm(true),
+                    },
+                  ]
+                : []),
             ]}
             contextRow={
               tool === 'select' && selectedAnnotation ? (
@@ -558,6 +596,12 @@ export default function EditorScreen() {
             }
           />
         )}
+        <FormPanel
+          visible={editingForm}
+          fields={formFields}
+          onCancel={() => setEditingForm(false)}
+          onApply={applyForm}
+        />
         <PageManager
           visible={managingPages}
           pages={pages}

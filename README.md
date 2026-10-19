@@ -10,6 +10,13 @@ device with no server and no network connection.
   share or delete them.
 - **Annotate**: pen, highlighter, text, box, circle, line, arrow and whiteout tools,
   plus an eraser. Each tool has its own color and size settings.
+- **Edit the PDF's own text**: with the Edit text tool, tap highlighted text to change it.
+  The original is covered and the new text is drawn at the same position and size, in the
+  closest standard font.
+- **Fill forms**: fill in text boxes, checkboxes, dropdowns and radio buttons in fillable PDFs.
+  They stay fillable after saving, or you can lock them in place.
+- **Zoom**: pinch or use the zoom buttons (50%–300%). Pages re-render sharply at each
+  zoom level.
 - **Edit annotations**: tap one to select it, drag to move it, use the corner handle to
   resize it, and edit, duplicate or delete it from the action bar. Undo and redo cover
   every change.
@@ -71,9 +78,11 @@ src/
   of vector annotations. Annotation coordinates are in PDF points, in the page's base
   orientation, so they rotate along with the page. Blank pages and merged PDFs are
   *appended* to the source document, which keeps existing page indices valid.
-- **Saving.** [pdf-lib](https://pdf-lib.js.org/) copies the pages in editor order and
-  applies their rotation. It then draws each annotation into the page content, mapping
-  coordinates through the page's crop box and its own `/Rotate`.
+- **Saving.** [pdf-lib](https://pdf-lib.js.org/) edits the source document in place, which
+  keeps its fillable form. It arranges the pages in editor order with their rotation, then
+  draws each annotation into the page content, mapping coordinates through the page's crop
+  box and its own `/Rotate`. Form values are written into the source as soon as you apply
+  them.
 
 ## Known limitations
 
@@ -81,7 +90,7 @@ src/
   longer be edited as separate objects.
 - Text uses the standard Helvetica font. Characters outside Latin-1 are written as `?`
   in the saved PDF.
-- The app can't edit the PDF's existing text in place. Use whiteout to cover it, then
-  add new text on top.
-- Pinch-to-zoom isn't supported yet. Pages fit the screen width.
+- Edit text works on text runs, which are often whole phrases or lines rather than
+  single words. The cover box is white, and scanned PDFs have no text to edit.
+- Form edits aren't part of undo/redo.
 - Password-protected PDFs aren't supported.
