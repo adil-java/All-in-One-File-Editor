@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { Stack, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { router, Stack, useLocalSearchParams, useNavigation, usePreventRemove } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -21,11 +21,20 @@ import { Toolbar } from '@/components/editor/toolbar';
 import { TextPromptModal } from '@/components/text-prompt-modal';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { getDocument, readDocumentBase64 } from '@/lib/documents';
+import { showActionSheet } from '@/lib/action-sheet';
+import {
+  createDocument,
+  getDocument,
+  overwriteDocument,
+  readDocumentBase64,
+  shareBytes,
+  shareDocument,
+} from '@/lib/documents';
 import { pagesFromSource, useEditorHistory } from '@/lib/editor/history';
 import { defaultToolSettings, isDrawingTool, type ToolSettings } from '@/lib/editor/tools';
 import { centeredBox, translate } from '@/lib/editor/geometry';
 import { type Annotation, type EditorPage, makeId, type Tool } from '@/lib/editor/types';
+import { exportPdf } from '@/lib/pdf/export';
 import type { Signature } from '@/lib/signatures';
 import {
   type PageInfo,
@@ -59,6 +68,89 @@ export default function EditorScreen() {
   const [textRequest, setTextRequest] = useState<TextRequest | null>(null);
   const [signing, setSigning] = useState(false);
   const [visiblePageKey, setVisiblePageKey] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const navigation = useNavigation();
+
+  // Set when leaving on purpose, so the unsaved-changes prompt is skipped.
+  const leaving = useRef(false);
+
+  /** Runs a long task behind a progress overlay. Resolves to whether it succeeded. */
+  const runBusy = async (label: string, task: () => Promise<void>) => {
+    setBusy(label);
+    try {
+      await task();
+      return true;
+    } catch (error) {
+      Alert.alert('Something went wrong', error instanceof Error ? error.message : String(error));
+      return false;
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /** Flattens all edits into the document file and reloads it. */
+  const save = () =>
+    runBusy('Saving…', async () => {
+      if (!doc || !base64) return;
+      const bytes = await exportPdf(base64, pages);
+      await overwriteDocument(doc.id, bytes);
+      setSelection(null);
+      dispatch({ type: 'reset', pages: pagesFromSource(pages.length) });
+      setBase64(await readDocumentBase64(doc.id));
+    });
+
+  const saveCopy = () =>
+    runBusy('Saving copy…', async () => {
+      if (!doc || !base64) return;
+      const copy = await createDocument(`${doc.name} edited`, await exportPdf(base64, pages));
+      Alert.alert('Saved', `Saved as "${copy.name}".`, [
+        { text: 'Stay here', style: 'cancel' },
+        {
+          text: 'Open copy',
+          onPress: () => {
+            leaving.current = true;
+            router.replace({ pathname: '/editor/[id]', params: { id: copy.id } });
+          },
+        },
+      ]);
+    });
+
+  const share = () =>
+    runBusy('Preparing…', async () => {
+      if (!doc || !base64) return;
+      if (history.dirty) await shareBytes(doc.name, await exportPdf(base64, pages));
+      else await shareDocument(doc);
+    });
+
+  const showMore = () =>
+    showActionSheet(doc?.name ?? 'Document', [
+      { label: 'Save as copy', onPress: saveCopy },
+      { label: 'Share', onPress: share },
+    ]);
+
+  usePreventRemove(history.dirty && !busy, ({ data }) => {
+    if (leaving.current) {
+      navigation.dispatch(data.action);
+      return;
+    }
+    Alert.alert('Unsaved changes', 'Save your edits before leaving?', [
+      { text: 'Keep editing', style: 'cancel' },
+      {
+        text: 'Discard',
+        style: 'destructive',
+        onPress: () => navigation.dispatch(data.action),
+      },
+      {
+        text: 'Save',
+        onPress: async () => {
+          if (await save()) {
+            leaving.current = true;
+            navigation.dispatch(data.action);
+          }
+        },
+      },
+    ]);
+  });
 
   // FlatList does not support changing this callback after mount, so it must be stable.
   const onViewableItemsChanged = useCallback(
@@ -208,6 +300,12 @@ export default function EditorScreen() {
                   disabled={!history.canRedo}
                   onPress={history.redo}
                 />
+                <HeaderButton
+                  icon="save-outline"
+                  disabled={!history.dirty || !!busy}
+                  onPress={save}
+                />
+                <HeaderButton icon="ellipsis-horizontal-circle-outline" onPress={showMore} />
               </View>
             ),
           }}
@@ -283,6 +381,14 @@ export default function EditorScreen() {
           onCancel={() => setTextRequest(null)}
           onSubmit={submitText}
         />
+        {busy && (
+          <View style={styles.busy}>
+            <View style={[styles.busyCard, { backgroundColor: theme.backgroundElement }]}>
+              <ActivityIndicator color={theme.tint} />
+              <Text style={{ color: theme.text }}>{busy}</Text>
+            </View>
+          </View>
+        )}
       </View>
     </PdfRendererProvider>
   );
@@ -311,4 +417,18 @@ const styles = StyleSheet.create({
   message: { flex: 1, textAlign: 'center', textAlignVertical: 'center', padding: Spacing.four },
   headerActions: { flexDirection: 'row', gap: Spacing.three },
   headerButton: { padding: Spacing.one },
+  busy: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  busyCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+    paddingHorizontal: Spacing.four,
+    paddingVertical: Spacing.three,
+    borderRadius: 12,
+  },
 });

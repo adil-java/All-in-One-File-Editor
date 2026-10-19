@@ -2,21 +2,13 @@ import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import {
-  ActionSheetIOS,
-  Alert,
-  FlatList,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { TextPromptModal } from '@/components/text-prompt-modal';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { showActionSheet } from '@/lib/action-sheet';
 import {
   deleteDocument,
   duplicateDocument,
@@ -71,34 +63,13 @@ export default function HomeScreen() {
       { text: 'Delete', style: 'destructive', onPress: () => run(() => deleteDocument(doc.id)) },
     ]);
 
-  const showActions = (doc: PdfDocument) => {
-    const actions = [
+  const showActions = (doc: PdfDocument) =>
+    showActionSheet(doc.name, [
       { label: 'Rename', onPress: () => setRenaming(doc) },
       { label: 'Duplicate', onPress: () => run(() => duplicateDocument(doc.id)) },
       { label: 'Share', onPress: () => run(() => shareDocument(doc)) },
       { label: 'Delete', onPress: () => confirmDelete(doc), destructive: true },
-    ];
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          title: doc.name,
-          options: [...actions.map((a) => a.label), 'Cancel'],
-          destructiveButtonIndex: actions.findIndex((a) => a.destructive),
-          cancelButtonIndex: actions.length,
-        },
-        (index) => actions[index]?.onPress(),
-      );
-    } else {
-      Alert.alert(doc.name, undefined, [
-        ...actions.map((a) => ({
-          text: a.label,
-          style: a.destructive ? ('destructive' as const) : ('default' as const),
-          onPress: a.onPress,
-        })),
-        { text: 'Cancel', style: 'cancel' },
-      ]);
-    }
-  };
+    ]);
 
   return (
     <View style={styles.container}>

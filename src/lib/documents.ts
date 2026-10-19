@@ -121,6 +121,14 @@ export async function shareDocument(doc: PdfDocument) {
   });
 }
 
+/** Shares bytes that are not (yet) in the library, via a temporary file. */
+export async function shareBytes(name: string, bytes: Uint8Array) {
+  const file = new File(Paths.cache, `${sanitizeName(name)}.pdf`);
+  file.create({ overwrite: true });
+  await file.write(bytes);
+  await shareDocument(toDocument(file));
+}
+
 export function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
