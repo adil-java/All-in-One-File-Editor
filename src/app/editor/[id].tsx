@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
+import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { router, Stack, useLocalSearchParams, useNavigation, usePreventRemove } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { type ComponentRef, useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -15,6 +17,7 @@ import {
 import { FlatList } from 'react-native-gesture-handler';
 
 import { PageEditor, type TextRequest } from '@/components/editor/page-editor';
+import { PageManager } from '@/components/editor/page-manager';
 import { SelectionBar } from '@/components/editor/selection-bar';
 import { SignaturePad } from '@/components/editor/signature-pad';
 import { Toolbar } from '@/components/editor/toolbar';
@@ -32,9 +35,10 @@ import {
 } from '@/lib/documents';
 import { pagesFromSource, useEditorHistory } from '@/lib/editor/history';
 import { defaultToolSettings, isDrawingTool, type ToolSettings } from '@/lib/editor/tools';
-import { centeredBox, translate } from '@/lib/editor/geometry';
+import { centeredBox, rotatedSize, translate } from '@/lib/editor/geometry';
 import { type Annotation, type EditorPage, makeId, type Tool } from '@/lib/editor/types';
 import { exportPdf } from '@/lib/pdf/export';
+import { A4, appendBlankPage, appendDocument } from '@/lib/pdf/pages';
 import type { Signature } from '@/lib/signatures';
 import {
   type PageInfo,
@@ -69,6 +73,8 @@ export default function EditorScreen() {
   const [signing, setSigning] = useState(false);
   const [visiblePageKey, setVisiblePageKey] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [managingPages, setManagingPages] = useState(false);
+  const listRef = useRef<ComponentRef<typeof FlatList<EditorPage>>>(null);
   const navigation = useNavigation();
 
   // Set when leaving on purpose, so the unsaved-changes prompt is skipped.
@@ -122,8 +128,57 @@ export default function EditorScreen() {
       else await shareDocument(doc);
     });
 
+  const insertSourcePages = (afterIndex: number | null, sourceIndices: number[]) => {
+    dispatch({
+      type: 'insert-pages',
+      index: (afterIndex ?? pages.length - 1) + 1,
+      pages: sourceIndices.map((sourceIndex) => ({
+        key: makeId('p'),
+        sourceIndex,
+        rotation: 0,
+        annotations: [],
+      })),
+    });
+  };
+
+  const addBlankPage = (afterIndex: number | null) =>
+    runBusy('Adding page…', async () => {
+      if (!base64) return;
+      // Match the size of the page it follows.
+      const neighbor = pages[afterIndex ?? pages.length - 1];
+      const info = neighbor && renderer.pages[neighbor.sourceIndex];
+      const size = info ? rotatedSize(info.width, info.height, neighbor.rotation) : A4;
+      const result = await appendBlankPage(base64, size);
+      setBase64(result.base64);
+      insertSourcePages(afterIndex, [result.index]);
+    });
+
+  const mergePdf = async (afterIndex: number | null) => {
+    const picked = await DocumentPicker.getDocumentAsync({
+      type: 'application/pdf',
+      copyToCacheDirectory: true,
+    });
+    if (picked.canceled) return;
+    await runBusy('Merging…', async () => {
+      if (!base64) return;
+      const other = await new File(picked.assets[0].uri).base64();
+      const result = await appendDocument(base64, other);
+      setBase64(result.base64);
+      insertSourcePages(
+        afterIndex,
+        Array.from({ length: result.count }, (_, i) => result.startIndex + i),
+      );
+    });
+  };
+
+  const openPage = (index: number) => {
+    setManagingPages(false);
+    listRef.current?.scrollToIndex({ index, animated: true });
+  };
+
   const showMore = () =>
     showActionSheet(doc?.name ?? 'Document', [
+      { label: 'Manage pages', onPress: () => setManagingPages(true) },
       { label: 'Save as copy', onPress: saveCopy },
       { label: 'Share', onPress: share },
     ]);
@@ -282,6 +337,19 @@ export default function EditorScreen() {
 
   const pageWidth = windowWidth - Spacing.three * 2;
 
+  // Page heights are known up front, which lets the list jump straight to any page.
+  const pageHeight = (page: EditorPage) => {
+    const info = renderer.pages[page.sourceIndex];
+    if (!info) return 0;
+    const size = rotatedSize(info.width, info.height, page.rotation);
+    return (pageWidth * size.height) / size.width;
+  };
+  const getItemLayout = (data: ArrayLike<EditorPage> | null | undefined, index: number) => {
+    let offset = Spacing.three;
+    for (let i = 0; i < index; i++) offset += pageHeight(data![i]) + Spacing.three;
+    return { length: pageHeight(data![index]), offset, index };
+  };
+
   return (
     <PdfRendererProvider value={renderer}>
       <View style={[styles.container, { backgroundColor: theme.canvas }]}>
@@ -321,7 +389,9 @@ export default function EditorScreen() {
           <ActivityIndicator style={styles.message} color={theme.tint} />
         ) : (
           <FlatList
+            ref={listRef}
             data={pages}
+            getItemLayout={getItemLayout}
             keyExtractor={(page) => page.key}
             contentContainerStyle={styles.list}
             scrollEnabled={!isDrawingTool(tool)}
@@ -356,6 +426,11 @@ export default function EditorScreen() {
             actions={[
               { label: 'Sign', icon: 'draw-pen', onPress: () => setSigning(true) },
               { label: 'Image', icon: 'image-outline', onPress: insertImage },
+              {
+                label: 'Pages',
+                icon: 'file-document-multiple-outline',
+                onPress: () => setManagingPages(true),
+              },
             ]}
             contextRow={
               tool === 'select' && selectedAnnotation ? (
@@ -364,6 +439,15 @@ export default function EditorScreen() {
             }
           />
         )}
+        <PageManager
+          visible={managingPages}
+          pages={pages}
+          dispatch={dispatch}
+          onClose={() => setManagingPages(false)}
+          onOpenPage={openPage}
+          onAddBlankPage={addBlankPage}
+          onMergePdf={mergePdf}
+        />
         <SignaturePad
           visible={signing}
           onCancel={() => setSigning(false)}
