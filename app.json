@@ -50,6 +50,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "91ba05c5-da63-4ae5-90cf-d0a056eb7239"
+      }
+    },
+    "owner": "adil-react"
   }
 }

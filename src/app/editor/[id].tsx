@@ -13,7 +13,13 @@ import {
   View,
   type ViewToken,
 } from 'react-native';
-import { FlatList, Gesture, GestureDetector, ScrollView } from 'react-native-gesture-handler';
+import {
+  FlatList,
+  Gesture,
+  GestureDetector,
+  type GestureType,
+  ScrollView,
+} from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
@@ -440,7 +446,13 @@ export default function EditorScreen() {
     applyZoom(zoom * scale);
     pinchScale.set(1);
   };
+  // The page lists list the pinch as simultaneous, otherwise a scroll that has
+  // already started claims the touch and the pinch never activates.
+  const pinchRef = useRef<GestureType | undefined>(undefined);
   const pinch = Gesture.Pinch()
+    // withRef only stores the ref object for gesture relations; it is not read here.
+    // eslint-disable-next-line react-hooks/refs
+    .withRef(pinchRef)
     .onUpdate((e) => {
       pinchScale.set(Math.min(MAX_ZOOM / zoom, Math.max(MIN_ZOOM / zoom, e.scale)));
     })
@@ -499,11 +511,13 @@ export default function EditorScreen() {
             <GestureDetector gesture={pinch}>
               <Animated.View style={[styles.viewer, pinchStyle]}>
                 <ScrollView
+                  simultaneousHandlers={pinchRef}
                   horizontal
                   scrollEnabled={!isDrawingTool(tool) && contentWidth > windowWidth}
                   showsHorizontalScrollIndicator={contentWidth > windowWidth}>
                   <FlatList
                     ref={listRef}
+                    simultaneousHandlers={pinchRef}
                     data={pages}
                     getItemLayout={getItemLayout}
                     keyExtractor={(page) => page.key}
