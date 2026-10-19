@@ -18,6 +18,17 @@ import { RENDERER_HTML } from './renderer-html';
 /** Size of a page in PDF points, as displayed with its intrinsic /Rotate applied. */
 export type PageInfo = { width: number; height: number; rotation: number };
 
+/** A run of text in the source PDF, in base page coordinates (points, origin top-left). */
+export type PdfTextItem = {
+  text: string;
+  x: number;
+  baseline: number;
+  width: number;
+  fontSize: number;
+  /** CSS generic family reported by pdf.js, e.g. 'sans-serif', 'serif', 'monospace'. */
+  fontFamily: string;
+};
+
 export type PdfRenderer = {
   status: 'loading' | 'loaded' | 'error';
   error: string | null;
@@ -27,6 +38,8 @@ export type PdfRenderer = {
   /** Renders a page to a JPEG data URL `width` pixels wide. */
   renderPage: (index: number, width: number, extraRotation: number) => Promise<string>;
   getCachedPage: (index: number, width: number, extraRotation: number) => string | undefined;
+  /** Extracts the text runs of a source page. */
+  getTextItems: (index: number) => Promise<PdfTextItem[]>;
   /** Hidden WebView hosting pdf.js; must be mounted for rendering to work. */
   element: ReactElement;
 };
@@ -38,7 +51,9 @@ type Message =
   | { type: 'loaded'; token: number; pages: PageInfo[] }
   | { type: 'load-error'; token: number; message: string }
   | { type: 'rendered'; requestId: number; dataUrl: string }
-  | { type: 'render-error'; requestId: number; message: string };
+  | { type: 'render-error'; requestId: number; message: string }
+  | { type: 'text'; requestId: number; items: PdfTextItem[] }
+  | { type: 'text-error'; requestId: number; message: string };
 
 const MAX_CACHED_PAGES = 40;
 
@@ -71,9 +86,10 @@ export function usePdfRenderer(
   const nextToken = useRef(1);
   const nextRequestId = useRef(1);
   const pending = useRef(
-    new Map<number, { resolve: (uri: string) => void; reject: (error: Error) => void }>(),
+    new Map<number, { resolve: (value: never) => void; reject: (error: Error) => void }>(),
   );
   const cache = useRef(new Map<string, string>());
+  const textCache = useRef(new Map<number, Promise<PdfTextItem[]>>());
 
   useEffect(() => {
     onLoadedRef.current = onLoaded;
@@ -98,6 +114,7 @@ export function usePdfRenderer(
         sources.current.delete(message.token);
         if (source === undefined) return;
         cache.current.clear();
+        textCache.current.clear();
         setResult({
           source,
           pages: message.type === 'loaded' ? message.pages : [],
@@ -108,11 +125,17 @@ export function usePdfRenderer(
         break;
       }
       case 'rendered':
-      case 'render-error': {
+      case 'text': {
         const request = pending.current.get(message.requestId);
         pending.current.delete(message.requestId);
-        if (message.type === 'rendered') request?.resolve(message.dataUrl);
-        else request?.reject(new Error(message.message));
+        request?.resolve((message.type === 'text' ? message.items : message.dataUrl) as never);
+        break;
+      }
+      case 'render-error':
+      case 'text-error': {
+        const request = pending.current.get(message.requestId);
+        pending.current.delete(message.requestId);
+        request?.reject(new Error(message.message));
         break;
       }
     }
@@ -132,7 +155,7 @@ export function usePdfRenderer(
     const requestId = nextRequestId.current++;
     return new Promise<string>((resolve, reject) => {
       pending.current.set(requestId, {
-        resolve: (uri) => {
+        resolve: (uri: string) => {
           cache.current.set(key, uri);
           if (cache.current.size > MAX_CACHED_PAGES) {
             cache.current.delete(cache.current.keys().next().value!);
@@ -145,6 +168,21 @@ export function usePdfRenderer(
         `window.__render(${requestId}, ${index}, ${width}, ${extraRotation}); true;`,
       );
     });
+  }, []);
+
+  const getTextItems = useCallback((index: number) => {
+    let items = textCache.current.get(index);
+    if (!items) {
+      const requestId = nextRequestId.current++;
+      items = new Promise<PdfTextItem[]>((resolve, reject) => {
+        pending.current.set(requestId, { resolve, reject });
+        webView.current?.injectJavaScript(`window.__text(${requestId}, ${index}); true;`);
+      });
+      // Allow a retry after a failure.
+      items.catch(() => textCache.current.delete(index));
+      textCache.current.set(index, items);
+    }
+    return items;
   }, []);
 
   const element = useMemo(
@@ -170,6 +208,7 @@ export function usePdfRenderer(
     generation,
     renderPage,
     getCachedPage,
+    getTextItems,
     element,
   };
 }

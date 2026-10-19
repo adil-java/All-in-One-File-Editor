@@ -48,6 +48,39 @@ const BRIDGE = `
     });
   };
 
+  // Text runs of a page in base page coordinates (pdf.js viewport at scale 1,
+  // origin top-left). Only runs that read left-to-right in that view are returned.
+  window.__text = function (requestId, index) {
+    queue = queue.then(async function () {
+      try {
+        if (!doc) throw new Error('No document loaded');
+        var page = await doc.getPage(index + 1);
+        var viewport = page.getViewport({ scale: 1 });
+        var content = await page.getTextContent();
+        var items = [];
+        content.items.forEach(function (item) {
+          if (!item.str || !item.str.trim()) return;
+          var tx = lib.Util.transform(viewport.transform, item.transform);
+          // Skip rotated or vertical text.
+          if (Math.abs(tx[1]) > 0.01 * Math.abs(tx[0]) || tx[0] <= 0) return;
+          var fontSize = Math.hypot(tx[2], tx[3]);
+          var style = content.styles[item.fontName] || {};
+          items.push({
+            text: item.str,
+            x: tx[4],
+            baseline: tx[5],
+            width: item.width * viewport.scale,
+            fontSize: fontSize,
+            fontFamily: style.fontFamily || 'sans-serif',
+          });
+        });
+        post({ type: 'text', requestId: requestId, items: items });
+      } catch (error) {
+        post({ type: 'text-error', requestId: requestId, message: errorMessage(error) });
+      }
+    });
+  };
+
   window.__render = function (requestId, index, width, extraRotation) {
     queue = queue.then(async function () {
       try {
