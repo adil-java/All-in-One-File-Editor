@@ -1,5 +1,5 @@
 /**
- * Writes the editor state into a new PDF with pdf-lib: pages are copied in
+ * Writes the editor state into the PDF with pdf-lib: pages are arranged in
  * editor order with their rotation, and annotations are flattened into the
  * page content as vector paths, text and images.
  */
@@ -236,22 +236,52 @@ async function drawAnnotation(page: PDFPage, a: Annotation, resources: Resources
   }
 }
 
-/** Builds the final PDF from the source document (base64) and the editor pages. */
-export async function exportPdf(sourceBase64: string, pages: EditorPage[]): Promise<Uint8Array> {
-  const source = await PDFDocument.load(sourceBase64, { ignoreEncryption: true });
-  const doc = await PDFDocument.create();
-  const copied = await doc.copyPages(
-    source,
-    pages.map((p) => p.sourceIndex),
-  );
-  const resources: Resources = {
-    doc,
-    fonts: new Map(),
-    images: new Map(),
-  };
+/**
+ * Removes form fields whose widgets all sit on pages that were deleted, so the
+ * form does not point at pages that are no longer in the document.
+ */
+function removeOrphanedFields(doc: PDFDocument, kept: PDFPage[]) {
+  const keptRefs = new Set(kept.map((page) => page.ref.toString()));
+  const form = doc.getForm();
+  for (const field of form.getFields()) {
+    const pageRefs = field.acroField.getWidgets().map((widget) => widget.P()?.toString());
+    if (pageRefs.length > 0 && pageRefs.every((ref) => ref && !keptRefs.has(ref))) {
+      form.acroForm.removeField(field.acroField);
+    }
+  }
+}
 
+/**
+ * Builds the final PDF from the source document (base64) and the editor pages.
+ *
+ * The source document is edited in place rather than copied into a new one,
+ * because copying pages drops the document's fillable form.
+ */
+export async function exportPdf(sourceBase64: string, pages: EditorPage[]): Promise<Uint8Array> {
+  const doc = await PDFDocument.load(sourceBase64, { ignoreEncryption: true });
+  const original = doc.getPages();
+
+  // Reuse each source page once; extra uses of a page (duplicates) get copies.
+  const used = new Set<number>();
+  const finalPages: PDFPage[] = [];
+  for (const { sourceIndex } of pages) {
+    if (used.has(sourceIndex)) {
+      const [copy] = await doc.copyPages(doc, [sourceIndex]);
+      finalPages.push(copy);
+    } else {
+      used.add(sourceIndex);
+      finalPages.push(original[sourceIndex]);
+    }
+  }
+
+  // Rebuild the page tree in editor order, dropping deleted pages.
+  for (let i = doc.getPageCount() - 1; i >= 0; i--) doc.removePage(i);
+  finalPages.forEach((page) => doc.addPage(page));
+  removeOrphanedFields(doc, finalPages);
+
+  const resources: Resources = { doc, fonts: new Map(), images: new Map() };
   for (let i = 0; i < pages.length; i++) {
-    const page = doc.addPage(copied[i]);
+    const page = finalPages[i];
     for (const annotation of pages[i].annotations) {
       await drawAnnotation(page, annotation, resources);
     }
