@@ -13,7 +13,9 @@ import {
   View,
   type ViewToken,
 } from 'react-native';
-import { FlatList } from 'react-native-gesture-handler';
+import { FlatList, Gesture, GestureDetector, ScrollView } from 'react-native-gesture-handler';
+import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 
 import { PageEditor, type TextRequest } from '@/components/editor/page-editor';
 import { PageManager } from '@/components/editor/page-manager';
@@ -49,6 +51,10 @@ import {
 } from '@/lib/pdf-renderer/use-pdf-renderer';
 
 const VIEWABILITY_CONFIG = { itemVisiblePercentThreshold: 40 };
+
+const ZOOM_LEVELS = [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3];
+const MIN_ZOOM = ZOOM_LEVELS[0];
+const MAX_ZOOM = ZOOM_LEVELS[ZOOM_LEVELS.length - 1];
 
 export default function EditorScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -366,7 +372,48 @@ export default function EditorScreen() {
     if (doc) readDocumentBase64(doc.id).then(setBase64);
   }, [doc]);
 
-  const pageWidth = windowWidth - Spacing.three * 2;
+  // Zoom re-lays out pages at a larger width (rendered sharply at that size)
+  // rather than scaling them, so touch coordinates stay exact while editing.
+  const [zoom, setZoom] = useState(1);
+  // Page to keep in view after a zoom change.
+  const [zoomAnchor, setZoomAnchor] = useState<{ index: number } | null>(null);
+  const fitWidth = windowWidth - Spacing.three * 2;
+  const pageWidth = Math.round(fitWidth * zoom);
+  const contentWidth = Math.max(windowWidth, pageWidth + Spacing.three * 2);
+
+  const applyZoom = (next: number) => {
+    const clamped = Math.round(Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, next)) * 100) / 100;
+    if (clamped === zoom) return;
+    setZoom(clamped);
+    const index = pages.findIndex((p) => p.key === visiblePageKey);
+    if (index > 0) setZoomAnchor({ index });
+  };
+
+  useEffect(() => {
+    if (!zoomAnchor) return;
+    const frame = requestAnimationFrame(() =>
+      listRef.current?.scrollToIndex({ index: zoomAnchor.index, animated: false }),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [zoomAnchor]);
+  const zoomIn = () => applyZoom(ZOOM_LEVELS.find((z) => z > zoom + 0.01) ?? MAX_ZOOM);
+  const zoomOut = () =>
+    applyZoom([...ZOOM_LEVELS].reverse().find((z) => z < zoom - 0.01) ?? MIN_ZOOM);
+
+  // Pinch shows a live scaled preview, then applies the zoom when released.
+  const pinchScale = useSharedValue(1);
+  const pinchStyle = useAnimatedStyle(() => ({ transform: [{ scale: pinchScale.get() }] }));
+  const finishPinch = (scale: number) => {
+    applyZoom(zoom * scale);
+    pinchScale.set(1);
+  };
+  const pinch = Gesture.Pinch()
+    .onUpdate((e) => {
+      pinchScale.set(Math.min(MAX_ZOOM / zoom, Math.max(MIN_ZOOM / zoom, e.scale)));
+    })
+    .onEnd((e) => {
+      scheduleOnRN(finishPinch, e.scale);
+    });
 
   // Page heights are known up front, which lets the list jump straight to any page.
   const pageHeight = (page: EditorPage) => {
@@ -419,34 +466,75 @@ export default function EditorScreen() {
         ) : pages.length === 0 ? (
           <ActivityIndicator style={styles.message} color={theme.tint} />
         ) : (
-          <FlatList
-            ref={listRef}
-            data={pages}
-            getItemLayout={getItemLayout}
-            keyExtractor={(page) => page.key}
-            contentContainerStyle={styles.list}
-            scrollEnabled={!isDrawingTool(tool)}
-            extraData={[tool, settings, selection, renderer.pages]}
-            onViewableItemsChanged={onViewableItemsChanged}
-            viewabilityConfig={VIEWABILITY_CONFIG}
-            renderItem={({ item }) => {
-              const info = renderer.pages[item.sourceIndex];
-              if (!info) return null;
-              return (
-                <PageEditor
-                  page={item}
-                  info={info}
-                  width={pageWidth}
-                  tool={tool}
-                  settings={settings}
-                  selectedId={selection?.pageKey === item.key ? selection.id : null}
-                  onSelect={onSelect}
-                  onTextRequest={setTextRequest}
-                  dispatch={dispatch}
+          <View style={styles.viewer}>
+            <GestureDetector gesture={pinch}>
+              <Animated.View style={[styles.viewer, pinchStyle]}>
+                <ScrollView
+                  horizontal
+                  scrollEnabled={!isDrawingTool(tool) && contentWidth > windowWidth}
+                  showsHorizontalScrollIndicator={contentWidth > windowWidth}>
+                  <FlatList
+                    ref={listRef}
+                    data={pages}
+                    getItemLayout={getItemLayout}
+                    keyExtractor={(page) => page.key}
+                    style={{ width: contentWidth }}
+                    contentContainerStyle={styles.list}
+                    scrollEnabled={!isDrawingTool(tool)}
+                    extraData={[tool, settings, selection, renderer.pages, pageWidth]}
+                    onViewableItemsChanged={onViewableItemsChanged}
+                    viewabilityConfig={VIEWABILITY_CONFIG}
+                    renderItem={({ item }) => {
+                      const info = renderer.pages[item.sourceIndex];
+                      if (!info) return null;
+                      return (
+                        <PageEditor
+                          page={item}
+                          info={info}
+                          width={pageWidth}
+                          tool={tool}
+                          settings={settings}
+                          selectedId={selection?.pageKey === item.key ? selection.id : null}
+                          onSelect={onSelect}
+                          onTextRequest={setTextRequest}
+                          dispatch={dispatch}
+                        />
+                      );
+                    }}
+                  />
+                </ScrollView>
+              </Animated.View>
+            </GestureDetector>
+            <View style={[styles.zoomControls, { backgroundColor: theme.backgroundElement }]}>
+              <Pressable
+                onPress={zoomOut}
+                disabled={zoom <= MIN_ZOOM}
+                hitSlop={6}
+                style={styles.zoomButton}>
+                <Ionicons
+                  name="remove"
+                  size={20}
+                  color={zoom <= MIN_ZOOM ? theme.backgroundSelected : theme.text}
                 />
-              );
-            }}
-          />
+              </Pressable>
+              <Pressable onPress={() => applyZoom(1)} hitSlop={6}>
+                <Text style={[styles.zoomLabel, { color: theme.text }]}>
+                  {Math.round(zoom * 100)}%
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={zoomIn}
+                disabled={zoom >= MAX_ZOOM}
+                hitSlop={6}
+                style={styles.zoomButton}>
+                <Ionicons
+                  name="add"
+                  size={20}
+                  color={zoom >= MAX_ZOOM ? theme.backgroundSelected : theme.text}
+                />
+              </Pressable>
+            </View>
+          </View>
         )}
         {doc && (
           <Toolbar
@@ -536,6 +624,24 @@ const styles = StyleSheet.create({
   message: { flex: 1, textAlign: 'center', textAlignVertical: 'center', padding: Spacing.four },
   headerActions: { flexDirection: 'row', gap: Spacing.three },
   headerButton: { padding: Spacing.one },
+  viewer: { flex: 1 },
+  zoomControls: {
+    position: 'absolute',
+    right: Spacing.three,
+    bottom: Spacing.three,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
+    paddingHorizontal: Spacing.one,
+    borderRadius: 999,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  zoomButton: { padding: Spacing.two },
+  zoomLabel: { fontSize: 13, fontWeight: '600', minWidth: 44, textAlign: 'center' },
   busy: {
     ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.25)',

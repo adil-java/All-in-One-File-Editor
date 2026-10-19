@@ -3,6 +3,8 @@ import { ActivityIndicator, Image, PixelRatio, StyleSheet, View } from 'react-na
 
 import { usePageImage } from '@/lib/pdf-renderer/use-pdf-renderer';
 
+const MAX_PIXEL_WIDTH = 2048;
+
 type Props = {
   sourceIndex: number;
   /** Rotation applied on top of the page's own /Rotate, in degrees. */
@@ -14,7 +16,8 @@ type Props = {
 
 /** A rendered PDF page with optional overlay content (annotations) on top. */
 export function PageView({ sourceIndex, rotation, width, height, children }: Props) {
-  const pixelWidth = Math.round(width * Math.min(PixelRatio.get(), 2));
+  // Capped so zoomed-in pages stay within a reasonable memory budget.
+  const pixelWidth = Math.round(Math.min(width * Math.min(PixelRatio.get(), 2), MAX_PIXEL_WIDTH));
   const uri = usePageImage(sourceIndex, pixelWidth, rotation);
 
   return (
