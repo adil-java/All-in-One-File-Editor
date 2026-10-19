@@ -177,29 +177,28 @@ export const PageEditor = memo(function PageEditor({
       updateDraft(null);
     });
 
-  // Moves or resizes annotations. Activates only when the touch lands on an
-  // annotation, so touches elsewhere fall through to page scrolling.
+  // Moves or resizes annotations. Enabled only while an annotation on this page
+  // is selected, so the page list scrolls normally otherwise; tapping empty
+  // space deselects. (Manual activation would need UI-thread worklets, but hit
+  // testing needs the annotations on the JS thread.)
   const selectPan = Gesture.Pan()
     .runOnJS(true)
-    .enabled(tool === 'select')
-    .manualActivation(true)
+    .enabled(tool === 'select' && selected !== null)
     .maxPointers(1)
-    .onTouchesDown((e, manager) => {
-      const touch = e.allTouches[0];
-      const p = toBase(touch.x, touch.y);
+    .minDistance(2)
+    .onBegin((e) => {
+      const p = toBase(e.x, e.y);
       if (isOnResizeHandle(p)) {
         gesture.current = { mode: 'resize', start: p, points: [], original: selected, draft: null };
-        manager.activate();
         return;
       }
-      const hit = findAnnotationAt(page.annotations, p, slop);
-      if (!hit) {
-        manager.fail();
-        return;
-      }
+      // Prefer the selected annotation, then whatever else is under the finger.
+      const hit =
+        selected && findAnnotationAt([selected], p, slop)
+          ? selected
+          : findAnnotationAt(page.annotations, p, slop);
       gesture.current = { mode: 'move', start: p, points: [], original: hit, draft: null };
-      onSelect(page.key, hit.id);
-      manager.activate();
+      if (hit && hit !== selected) onSelect(page.key, hit.id);
     })
     .onUpdate((e) => {
       const { original, start, mode } = gesture.current;
