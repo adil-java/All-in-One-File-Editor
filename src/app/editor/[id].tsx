@@ -1,18 +1,22 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   StyleSheet,
   Text,
   useWindowDimensions,
   View,
+  type ListViewToken,
 } from 'react-native';
 import { FlatList } from 'react-native-gesture-handler';
 
 import { PageEditor, type TextRequest } from '@/components/editor/page-editor';
 import { SelectionBar } from '@/components/editor/selection-bar';
+import { SignaturePad } from '@/components/editor/signature-pad';
 import { Toolbar } from '@/components/editor/toolbar';
 import { TextPromptModal } from '@/components/text-prompt-modal';
 import { Spacing } from '@/constants/theme';
@@ -20,13 +24,16 @@ import { useTheme } from '@/hooks/use-theme';
 import { getDocument, readDocumentBase64 } from '@/lib/documents';
 import { pagesFromSource, useEditorHistory } from '@/lib/editor/history';
 import { defaultToolSettings, isDrawingTool, type ToolSettings } from '@/lib/editor/tools';
-import { translate } from '@/lib/editor/geometry';
-import { makeId, type Tool } from '@/lib/editor/types';
+import { centeredBox, translate } from '@/lib/editor/geometry';
+import { type Annotation, type EditorPage, makeId, type Tool } from '@/lib/editor/types';
+import type { Signature } from '@/lib/signatures';
 import {
   type PageInfo,
   PdfRendererProvider,
   usePdfRenderer,
 } from '@/lib/pdf-renderer/use-pdf-renderer';
+
+const VIEWABILITY_CONFIG = { itemVisiblePercentThreshold: 40 };
 
 export default function EditorScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -36,12 +43,31 @@ export default function EditorScreen() {
   const [base64, setBase64] = useState<string | null>(null);
   const history = useEditorHistory();
   const { pages, dispatch } = history;
+
+  const onLoaded = useCallback(
+    (info: PageInfo[]) => {
+      if (pages.length === 0) dispatch({ type: 'reset', pages: pagesFromSource(info.length) });
+    },
+    [pages.length, dispatch],
+  );
+  const renderer = usePdfRenderer(base64, onLoaded);
   const [tool, setTool] = useState<Tool>('select');
   const [toolSettings, setToolSettings] = useState(defaultToolSettings);
   const settings = toolSettings[tool];
   const setSettings = (next: ToolSettings) => setToolSettings((all) => ({ ...all, [tool]: next }));
   const [selection, setSelection] = useState<{ pageKey: string; id: string } | null>(null);
   const [textRequest, setTextRequest] = useState<TextRequest | null>(null);
+  const [signing, setSigning] = useState(false);
+  const [visiblePageKey, setVisiblePageKey] = useState<string | null>(null);
+
+  // FlatList does not support changing this callback after mount, so it must be stable.
+  const onViewableItemsChanged = useCallback(
+    ({ viewableItems }: { viewableItems: ListViewToken[] }) => {
+      const first = viewableItems.find((v) => v.isViewable);
+      if (first) setVisiblePageKey((first.item as EditorPage).key);
+    },
+    [],
+  );
 
   const selectedAnnotation = selection
     ? (pages
@@ -79,6 +105,50 @@ export default function EditorScreen() {
     });
   };
 
+  /** Adds an annotation centered on the page currently in view and selects it. */
+  const placeOnVisiblePage = (build: (page: { width: number; height: number }) => Annotation) => {
+    const page = pages.find((p) => p.key === visiblePageKey) ?? pages[0];
+    const info = page && renderer.pages[page.sourceIndex];
+    if (!info) return;
+    const annotation = build(info);
+    dispatch({ type: 'add-annotation', pageKey: page.key, annotation });
+    setTool('select');
+    setSelection({ pageKey: page.key, id: annotation.id });
+  };
+
+  const insertSignature = (signature: Signature) => {
+    setSigning(false);
+    placeOnVisiblePage((page) => ({
+      id: makeId(),
+      type: 'signature',
+      ...centeredBox(page, signature.aspect, 0.4),
+      strokes: signature.strokes,
+      color: signature.color,
+      strokeWidth: signature.strokeWidth,
+    }));
+  };
+
+  const insertImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      base64: true,
+      quality: 0.8,
+    });
+    const asset = result.canceled ? null : result.assets[0];
+    if (!asset?.base64) return;
+    if (!asset.width || !asset.height) {
+      Alert.alert('Unsupported image', 'Could not read the size of this image.');
+      return;
+    }
+    const aspect = asset.width / asset.height;
+    placeOnVisiblePage((page) => ({
+      id: makeId(),
+      type: 'image',
+      ...centeredBox(page, aspect, 0.6),
+      uri: `data:image/jpeg;base64,${asset.base64}`,
+    }));
+  };
+
   const selectionActions = () => {
     if (!selection || !selectedAnnotation) return [];
     const { pageKey } = selection;
@@ -113,14 +183,6 @@ export default function EditorScreen() {
       { label: 'Done', icon: 'check' as const, onPress: () => setSelection(null) },
     ];
   };
-
-  const onLoaded = useCallback(
-    (info: PageInfo[]) => {
-      if (pages.length === 0) dispatch({ type: 'reset', pages: pagesFromSource(info.length) });
-    },
-    [pages.length, dispatch],
-  );
-  const renderer = usePdfRenderer(base64, onLoaded);
 
   useEffect(() => {
     if (doc) readDocumentBase64(doc.id).then(setBase64);
@@ -166,6 +228,8 @@ export default function EditorScreen() {
             contentContainerStyle={styles.list}
             scrollEnabled={!isDrawingTool(tool)}
             extraData={[tool, settings, selection, renderer.pages]}
+            onViewableItemsChanged={onViewableItemsChanged}
+            viewabilityConfig={VIEWABILITY_CONFIG}
             renderItem={({ item }) => {
               const info = renderer.pages[item.sourceIndex];
               if (!info) return null;
@@ -191,6 +255,10 @@ export default function EditorScreen() {
             settings={settings}
             onToolChange={changeTool}
             onSettingsChange={setSettings}
+            actions={[
+              { label: 'Sign', icon: 'draw-pen', onPress: () => setSigning(true) },
+              { label: 'Image', icon: 'image-outline', onPress: insertImage },
+            ]}
             contextRow={
               tool === 'select' && selectedAnnotation ? (
                 <SelectionBar actions={selectionActions()} />
@@ -198,6 +266,11 @@ export default function EditorScreen() {
             }
           />
         )}
+        <SignaturePad
+          visible={signing}
+          onCancel={() => setSigning(false)}
+          onDone={insertSignature}
+        />
         <TextPromptModal
           visible={textRequest !== null}
           title={textRequest && 'annotation' in textRequest ? 'Edit text' : 'Add text'}
