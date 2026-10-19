@@ -1,4 +1,4 @@
-import { memo, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
@@ -6,6 +6,7 @@ import { AnnotationLayer, HANDLE_SIZE } from '@/components/editor/annotation-lay
 import { PageView } from '@/components/editor/page-view';
 import {
   bounds,
+  containsPoint,
   displayToBase,
   findAnnotationAt,
   isResizable,
@@ -24,11 +25,18 @@ import {
   type TextAnnotation,
   type Tool,
 } from '@/lib/editor/types';
-import type { PageInfo } from '@/lib/pdf-renderer/use-pdf-renderer';
+import { textItemBox } from '@/lib/editor/text-replace';
+import {
+  type PageInfo,
+  type PdfTextItem,
+  usePdfRendererContext,
+} from '@/lib/pdf-renderer/use-pdf-renderer';
 
 export type TextRequest =
   | { pageKey: string; point: Point }
-  | { pageKey: string; annotation: TextAnnotation };
+  | { pageKey: string; annotation: TextAnnotation }
+  /** Replace a run of text that is part of the PDF itself. */
+  | { pageKey: string; replace: PdfTextItem };
 
 type Props = {
   page: EditorPage;
@@ -82,6 +90,25 @@ export const PageEditor = memo(function PageEditor({
     original: null,
     draft: null,
   });
+
+  // Text runs of the PDF page, loaded while the Edit text tool is active.
+  const { status, generation, getTextItems } = usePdfRendererContext();
+  const [pdfText, setPdfText] = useState<{ key: string; items: PdfTextItem[] } | null>(null);
+  const pdfTextKey = `${generation}:${page.sourceIndex}`;
+  const textItems = tool === 'edit-text' && pdfText?.key === pdfTextKey ? pdfText.items : null;
+
+  useEffect(() => {
+    if (tool !== 'edit-text' || status !== 'loaded') return;
+    let cancelled = false;
+    getTextItems(page.sourceIndex)
+      .then((items) => {
+        if (!cancelled) setPdfText({ key: pdfTextKey, items });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [tool, status, getTextItems, page.sourceIndex, pdfTextKey]);
 
   const toBase = (x: number, y: number) =>
     displayToBase({ x: x * pointsPerPixel, y: y * pointsPerPixel }, info, page.rotation);
@@ -218,12 +245,20 @@ export const PageEditor = memo(function PageEditor({
 
   const tap = Gesture.Tap()
     .runOnJS(true)
-    .enabled(tool === 'select' || tool === 'text')
+    .enabled(tool === 'select' || tool === 'text' || tool === 'edit-text')
     .onEnd((e, success) => {
       if (!success) return;
       const p = toBase(e.x, e.y);
       const hit = findAnnotationAt(page.annotations, p, slop);
-      if (tool === 'select') {
+      if (tool === 'edit-text') {
+        // Text added in the editor (including earlier replacements) wins over the PDF's own.
+        if (hit?.type === 'text') return onTextRequest({ pageKey: page.key, annotation: hit });
+        const item = textItems
+          ?.slice()
+          .reverse()
+          .find((t) => containsPoint(textItemBox(t), p, slop / 2));
+        if (item) onTextRequest({ pageKey: page.key, replace: item });
+      } else if (tool === 'select') {
         onSelect(page.key, hit?.id ?? null);
       } else if (hit?.type === 'text') {
         onTextRequest({ pageKey: page.key, annotation: hit });
@@ -252,6 +287,7 @@ export const PageEditor = memo(function PageEditor({
             annotations={annotations}
             draft={editing ? null : draft?.annotation}
             selectedId={tool === 'select' ? selectedId : null}
+            hints={textItems?.map(textItemBox)}
             base={info}
             rotation={page.rotation}
             width={width}

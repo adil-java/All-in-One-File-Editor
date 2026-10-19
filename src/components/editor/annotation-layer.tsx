@@ -11,15 +11,22 @@ import {
   textLines,
 } from '@/lib/editor/geometry';
 import { arrowHead, denormalize, inkPath } from '@/lib/editor/paths';
-import type { Annotation, Rotation } from '@/lib/editor/types';
+import type { Annotation, Rect as Box, Rotation, TextFont } from '@/lib/editor/types';
 
-const FONT_FAMILY = Platform.select({ ios: 'Helvetica', default: 'sans-serif' });
+// Screen fonts matching the standard PDF fonts used on export.
+const FONT_FAMILIES: Record<TextFont, string | undefined> = {
+  sans: Platform.select({ ios: 'Helvetica', default: 'sans-serif' }),
+  serif: Platform.select({ ios: 'Times New Roman', default: 'serif' }),
+  mono: Platform.select({ ios: 'Courier', default: 'monospace' }),
+};
 
 type Props = {
   annotations: Annotation[];
   /** Annotation being drawn right now, not yet committed. */
   draft?: Annotation | null;
   selectedId?: string | null;
+  /** Faint boxes drawn under annotations, e.g. editable text in the PDF. */
+  hints?: Box[];
   /** Base page size in points. */
   base: { width: number; height: number };
   rotation: Rotation;
@@ -32,6 +39,7 @@ export function AnnotationLayer({
   annotations,
   draft,
   selectedId,
+  hints,
   base,
   rotation,
   width,
@@ -52,6 +60,18 @@ export function AnnotationLayer({
       style={StyleSheet.absoluteFill}
       pointerEvents="none">
       <G transform={baseToDisplayTransform(base, rotation)}>
+        {hints?.map((h, i) => (
+          <Rect
+            key={`hint${i}`}
+            x={h.x}
+            y={h.y}
+            width={h.w}
+            height={h.h}
+            fill="rgba(47,111,237,0.12)"
+            stroke="rgba(47,111,237,0.5)"
+            strokeWidth={0.5}
+          />
+        ))}
         {annotations.map((a) => (
           <AnnotationShape key={a.id} annotation={a} />
         ))}
@@ -133,7 +153,7 @@ const AnnotationShape = memo(function AnnotationShape({
               x={a.x}
               y={a.y + a.fontSize * (BASELINE + i * LINE_HEIGHT)}
               fontSize={a.fontSize}
-              fontFamily={FONT_FAMILY}
+              fontFamily={FONT_FAMILIES[a.font ?? 'sans']}
               fill={a.color}>
               {line}
             </Text>

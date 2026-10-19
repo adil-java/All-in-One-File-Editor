@@ -5,6 +5,7 @@ import { type Annotation, type EditorPage, makeId, type Rotation } from './types
 export type EditorAction =
   | { type: 'reset'; pages: EditorPage[] }
   | { type: 'add-annotation'; pageKey: string; annotation: Annotation }
+  | { type: 'add-annotations'; pageKey: string; annotations: Annotation[] }
   | { type: 'replace-annotation'; pageKey: string; annotation: Annotation }
   | { type: 'remove-annotation'; pageKey: string; id: string }
   | { type: 'clear-page'; pageKey: string }
@@ -47,6 +48,11 @@ function apply(pages: EditorPage[], action: EditorAction): EditorPage[] {
       return updatePage(pages, action.pageKey, (p) => ({
         ...p,
         annotations: [...p.annotations, action.annotation],
+      }));
+    case 'add-annotations':
+      return updatePage(pages, action.pageKey, (p) => ({
+        ...p,
+        annotations: [...p.annotations, ...action.annotations],
       }));
     case 'replace-annotation':
       return updatePage(pages, action.pageKey, (p) => ({

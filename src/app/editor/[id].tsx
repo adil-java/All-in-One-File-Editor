@@ -37,6 +37,7 @@ import {
 import { pagesFromSource, useEditorHistory } from '@/lib/editor/history';
 import { defaultToolSettings, isDrawingTool, type ToolSettings } from '@/lib/editor/tools';
 import { centeredBox, rotatedSize, translate } from '@/lib/editor/geometry';
+import { replaceTextAnnotations } from '@/lib/editor/text-replace';
 import { type Annotation, type EditorPage, makeId, type Tool } from '@/lib/editor/types';
 import { exportPdf } from '@/lib/pdf/export';
 import { A4, appendBlankPage, appendDocument } from '@/lib/pdf/pages';
@@ -265,6 +266,15 @@ export default function EditorScreen() {
       });
       return;
     }
+    if ('replace' in request) {
+      if (text === request.replace.text) return;
+      dispatch({
+        type: 'add-annotations',
+        pageKey: request.pageKey,
+        annotations: replaceTextAnnotations(request.replace, text),
+      });
+      return;
+    }
     const { color, size } = toolSettings.text;
     dispatch({
       type: 'add-annotation',
@@ -476,9 +486,13 @@ export default function EditorScreen() {
         />
         <TextPromptModal
           visible={textRequest !== null}
-          title={textRequest && 'annotation' in textRequest ? 'Edit text' : 'Add text'}
+          title={textRequest && !('point' in textRequest) ? 'Edit text' : 'Add text'}
           initialValue={
-            textRequest && 'annotation' in textRequest ? textRequest.annotation.text : ''
+            !textRequest || 'point' in textRequest
+              ? ''
+              : 'annotation' in textRequest
+                ? textRequest.annotation.text
+                : textRequest.replace.text
           }
           placeholder="Type something…"
           confirmLabel="Done"

@@ -43,6 +43,8 @@ export type LineAnnotation = Base & {
   arrow: boolean;
 };
 
+export type TextFont = 'sans' | 'serif' | 'mono';
+
 export type TextAnnotation = Base & {
   type: 'text';
   x: number;
@@ -50,6 +52,8 @@ export type TextAnnotation = Base & {
   text: string;
   fontSize: number;
   color: string;
+  /** Defaults to 'sans'. */
+  font?: TextFont;
 };
 
 export type ImageAnnotation = Base &
@@ -92,6 +96,7 @@ export type Tool =
   | 'pen'
   | 'highlighter'
   | 'text'
+  | 'edit-text'
   | 'rect'
   | 'ellipse'
   | 'line'

@@ -51,6 +51,14 @@ export const TOOLS: Record<Tool, ToolDefinition> = {
     defaults: { color: '#111111', size: 14 },
     hint: 'Tap on the page to add text',
   },
+  'edit-text': {
+    label: 'Edit text',
+    icon: 'form-textbox',
+    colors: [],
+    sizes: [],
+    defaults: { color: '#000000', size: 0 },
+    hint: 'Tap highlighted text in the PDF to change it',
+  },
   rect: {
     label: 'Box',
     icon: 'square-outline',
@@ -102,6 +110,7 @@ export const TOOL_ORDER: Tool[] = [
   'pen',
   'highlighter',
   'text',
+  'edit-text',
   'rect',
   'ellipse',
   'line',
@@ -112,7 +121,7 @@ export const TOOL_ORDER: Tool[] = [
 
 /** Tools that draw by dragging, so page scrolling must be disabled while active. */
 export function isDrawingTool(tool: Tool) {
-  return tool !== 'select' && tool !== 'text';
+  return tool !== 'select' && tool !== 'text' && tool !== 'edit-text';
 }
 
 export function defaultToolSettings(): Record<Tool, ToolSettings> {

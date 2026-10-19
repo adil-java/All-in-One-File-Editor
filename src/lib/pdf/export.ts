@@ -18,7 +18,13 @@ import {
 
 import { BASELINE, LINE_HEIGHT, textLines } from '@/lib/editor/geometry';
 import { arrowHead, denormalize, inkPath } from '@/lib/editor/paths';
-import type { Annotation, EditorPage, Point } from '@/lib/editor/types';
+import type { Annotation, EditorPage, Point, TextFont } from '@/lib/editor/types';
+
+const STANDARD_FONTS: Record<TextFont, StandardFonts> = {
+  sans: StandardFonts.Helvetica,
+  serif: StandardFonts.TimesRoman,
+  mono: StandardFonts.Courier,
+};
 
 function color(hex: string) {
   const value = parseInt(hex.replace('#', ''), 16);
@@ -103,7 +109,7 @@ function encodable(text: string, font: PDFFont) {
 
 type Resources = {
   doc: PDFDocument;
-  font: PDFFont;
+  fonts: Map<TextFont, PDFFont>;
   images: Map<string, PDFImage>;
 };
 
@@ -116,6 +122,15 @@ async function embedImage(uri: string, resources: Resources) {
     resources.images.set(uri, image);
   }
   return image;
+}
+
+async function embedFont(font: TextFont, resources: Resources) {
+  let embedded = resources.fonts.get(font);
+  if (!embedded) {
+    embedded = await resources.doc.embedFont(STANDARD_FONTS[font]);
+    resources.fonts.set(font, embedded);
+  }
+  return embedded;
 }
 
 async function drawAnnotation(page: PDFPage, a: Annotation, resources: Resources) {
@@ -190,19 +205,21 @@ async function drawAnnotation(page: PDFPage, a: Annotation, resources: Resources
         });
       }
       break;
-    case 'text':
+    case 'text': {
+      const font = await embedFont(a.font ?? 'sans', resources);
       textLines(a.text).forEach((line, i) => {
         const origin = map({ x: a.x, y: a.y + a.fontSize * (BASELINE + i * LINE_HEIGHT) });
-        page.drawText(encodable(line, resources.font), {
+        page.drawText(encodable(line, font), {
           x: origin.x,
           y: origin.y,
           size: a.fontSize,
-          font: resources.font,
+          font,
           color: color(a.color),
           rotate: degrees(rotation),
         });
       });
       break;
+    }
     case 'image': {
       const image = await embedImage(a.uri, resources);
       // Images are positioned by their own bottom-left corner.
@@ -229,7 +246,7 @@ export async function exportPdf(sourceBase64: string, pages: EditorPage[]): Prom
   );
   const resources: Resources = {
     doc,
-    font: await doc.embedFont(StandardFonts.Helvetica),
+    fonts: new Map(),
     images: new Map(),
   };
 
