@@ -1,6 +1,6 @@
 # PDF Editor
 
-A React Native PDF editor built with Expo (SDK 58). Import a PDF, mark it up, sign it,
+A React Native PDF editor built with Expo (SDK 57). Import a PDF, mark it up, sign it,
 rearrange its pages, and save the result back as a real PDF. Everything runs on the
 device with no server and no network connection.
 

@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
-import { router, Stack, useLocalSearchParams, useNavigation, usePreventRemove } from 'expo-router';
+import { router, Stack, useLocalSearchParams, useNavigation } from 'expo-router';
 import { type ComponentRef, useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -12,7 +12,7 @@ import {
   Text,
   useWindowDimensions,
   View,
-  type ListViewToken,
+  type ViewToken,
 } from 'react-native';
 import { FlatList } from 'react-native-gesture-handler';
 
@@ -183,35 +183,41 @@ export default function EditorScreen() {
       { label: 'Share', onPress: share },
     ]);
 
-  usePreventRemove(history.dirty && !busy, ({ data }) => {
-    if (leaving.current) {
-      navigation.dispatch(data.action);
-      return;
-    }
-    Alert.alert('Unsaved changes', 'Save your edits before leaving?', [
-      { text: 'Keep editing', style: 'cancel' },
-      {
-        text: 'Discard',
-        style: 'destructive',
-        onPress: () => navigation.dispatch(data.action),
-      },
-      {
-        text: 'Save',
-        onPress: async () => {
-          if (await save()) {
-            leaving.current = true;
-            navigation.dispatch(data.action);
-          }
-        },
-      },
-    ]);
+  // Ask before leaving with unsaved edits. Re-dispatched actions pass through
+  // because `leaving` is set first.
+  const preventLeave = history.dirty && !busy;
+  const saveRef = useRef(save);
+  useEffect(() => {
+    saveRef.current = save;
   });
+  useEffect(
+    () =>
+      navigation.addListener('beforeRemove', (e) => {
+        if (!preventLeave || leaving.current) return;
+        e.preventDefault();
+        const leave = () => {
+          leaving.current = true;
+          navigation.dispatch(e.data.action);
+        };
+        Alert.alert('Unsaved changes', 'Save your edits before leaving?', [
+          { text: 'Keep editing', style: 'cancel' },
+          { text: 'Discard', style: 'destructive', onPress: leave },
+          {
+            text: 'Save',
+            onPress: async () => {
+              if (await saveRef.current()) leave();
+            },
+          },
+        ]);
+      }),
+    [navigation, preventLeave],
+  );
 
   // FlatList does not support changing this callback after mount, so it must be stable.
   const onViewableItemsChanged = useCallback(
-    ({ viewableItems }: { viewableItems: ListViewToken[] }) => {
+    ({ viewableItems }: { viewableItems: ViewToken<EditorPage>[] }) => {
       const first = viewableItems.find((v) => v.isViewable);
-      if (first) setVisiblePageKey((first.item as EditorPage).key);
+      if (first) setVisiblePageKey(first.item.key);
     },
     [],
   );

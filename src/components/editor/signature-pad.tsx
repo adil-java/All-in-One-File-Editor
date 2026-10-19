@@ -1,11 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import {
-  GestureDetector,
-  GestureHandlerRootView,
-  usePanGesture,
-} from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
@@ -57,26 +53,19 @@ function SignaturePadContent({ onCancel, onDone }: Omit<Props, 'visible'>) {
   const [strokes, setStrokes] = useState<Point[][]>([]);
   const [color, setColor] = useState(COLORS[0]);
   const [saved, setSaved] = useState<Signature[]>([]);
-  const current = useRef<Point[]>([]);
 
   useEffect(() => {
     loadSignatures().then(setSaved);
   }, []);
 
-  const pan = usePanGesture({
-    runOnJS: true,
-    minDistance: 0,
-    maxPointers: 1,
-    onBegin: (e) => {
-      current.current = [{ x: e.x, y: e.y }];
-      setStrokes((s) => [...s, current.current]);
-    },
-    onUpdate: (e) => {
-      current.current = [...current.current, { x: e.x, y: e.y }];
-      const stroke = current.current;
-      setStrokes((s) => [...s.slice(0, -1), stroke]);
-    },
-  });
+  const pan = Gesture.Pan()
+    .runOnJS(true)
+    .minDistance(0)
+    .maxPointers(1)
+    .onBegin((e) => setStrokes((s) => [...s, [{ x: e.x, y: e.y }]]))
+    .onUpdate((e) =>
+      setStrokes((s) => [...s.slice(0, -1), [...s[s.length - 1], { x: e.x, y: e.y }]]),
+    );
 
   const done = async () => {
     const signature = toSignature(strokes, color);
