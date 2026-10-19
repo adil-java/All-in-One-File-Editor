@@ -1,56 +1,87 @@
-# Welcome to your Expo app 👋
+# PDF Editor
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A React Native PDF editor built with Expo (SDK 58). Import a PDF, mark it up, sign it,
+rearrange its pages, and save the result back as a real PDF. Everything runs on the
+device with no server and no network connection.
 
-## Get started
+## Features
 
-1. Install dependencies
+- **Library**: import PDFs from Files, create blank documents, and rename, duplicate,
+  share or delete them.
+- **Annotate**: pen, highlighter, text, box, circle, line, arrow and whiteout tools,
+  plus an eraser. Each tool has its own color and size settings.
+- **Edit annotations**: tap one to select it, drag to move it, use the corner handle to
+  resize it, and edit, duplicate or delete it from the action bar. Undo and redo cover
+  every change.
+- **Sign**: draw a signature once, then reuse it from your saved signatures.
+- **Images**: insert photos from your library.
+- **Pages**: rotate, reorder, duplicate and delete pages, insert blank pages, and merge
+  in another PDF.
+- **Save**: write edits into the file, save them as a copy, or share the edited PDF.
+  If you leave with unsaved changes, the app asks whether to save or discard them.
 
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **src/app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Getting started
 
 ```bash
-npm run reset-project
+npm install        # also runs scripts/bundle-pdfjs.js (see below)
+npx expo start
 ```
 
-This command will move the starter code to the **example** directory and create a blank **src/app** directory where you can start developing.
+Then open the app in **Expo Go**, an iOS simulator or an Android emulator. Every native
+module it uses ships with Expo Go, so you don't need a development build. The app
+targets iOS and Android. The web build is not supported, because rendering relies on a
+native WebView.
 
-### Other setup steps
+Useful checks:
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+```bash
+npx tsc --noEmit
+npx expo lint
+```
 
-## Learn more
+## How it works
 
-To learn more about developing your project with Expo, look at the following resources:
+```
+src/
+  app/
+    index.tsx               Document library (home)
+    editor/[id].tsx         Editor screen: state, toolbar, save/share, page manager
+  components/editor/
+    page-editor.tsx         One page: rendered image + annotation layer + gestures
+    annotation-layer.tsx    Draws annotations with react-native-svg
+    page-view.tsx           Rendered page image
+    toolbar.tsx             Tool picker and tool options
+    page-manager.tsx        Thumbnail grid for page operations
+    signature-pad.tsx       Signature capture and saved signatures
+  lib/
+    documents.ts            PDF files in the app's document directory
+    pdf-renderer/           pdf.js running in a hidden WebView
+    editor/                 Document model, geometry, undo/redo history, tools
+    pdf/export.ts           Flattens the editor state into a PDF with pdf-lib
+    pdf/pages.ts            Blank pages, merging, new documents
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+- **Rendering.** [pdf.js](https://mozilla.github.io/pdf.js/) runs inside a hidden
+  `react-native-webview` and rasterizes pages to JPEG on demand. The pdf.js library is
+  inlined into `src/lib/pdf-renderer/pdfjs-source.generated.ts` by
+  `scripts/bundle-pdfjs.js` on `npm install`. This file is git-ignored, so rendering
+  works offline. If the file is missing, run `node scripts/bundle-pdfjs.js`.
+- **Editing model.** The editor never changes the original PDF while you work. Each
+  editor page refers to a source page by index, and holds an extra rotation and a list
+  of vector annotations. Annotation coordinates are in PDF points, in the page's base
+  orientation, so they rotate along with the page. Blank pages and merged PDFs are
+  *appended* to the source document, which keeps existing page indices valid.
+- **Saving.** [pdf-lib](https://pdf-lib.js.org/) copies the pages in editor order and
+  applies their rotation. It then draws each annotation into the page content, mapping
+  coordinates through the page's crop box and its own `/Rotate`.
 
-## Join the community
+## Known limitations
 
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- Saving **flattens** annotations into the page content. After you save, they can no
+  longer be edited as separate objects.
+- Text uses the standard Helvetica font. Characters outside Latin-1 are written as `?`
+  in the saved PDF.
+- The app can't edit the PDF's existing text in place. Use whiteout to cover it, then
+  add new text on top.
+- Pinch-to-zoom isn't supported yet. Pages fit the screen width.
+- Password-protected PDFs aren't supported.
