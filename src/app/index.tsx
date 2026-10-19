@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
-import { router, useFocusEffect } from 'expo-router';
+import { router, Stack, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { showActionSheet } from '@/lib/action-sheet';
 import {
+  createDocument,
   deleteDocument,
   duplicateDocument,
   formatDate,
@@ -20,6 +21,7 @@ import {
   renameDocument,
   shareDocument,
 } from '@/lib/documents';
+import { createBlankPdf } from '@/lib/pdf/pages';
 
 export default function HomeScreen() {
   const theme = useTheme();
@@ -54,6 +56,9 @@ export default function HomeScreen() {
       if (imported.length === 1) openDocument(imported[0]);
     });
 
+  const createBlank = () =>
+    run(async () => openDocument(await createDocument('Untitled', await createBlankPdf())));
+
   const openDocument = (doc: PdfDocument) =>
     router.push({ pathname: '/editor/[id]', params: { id: doc.id } });
 
@@ -73,6 +78,15 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
+      <Stack.Screen
+        options={{
+          headerRight: () => (
+            <Pressable onPress={createBlank} hitSlop={8} accessibilityLabel="New blank PDF">
+              <Ionicons name="document-outline" size={22} color={theme.text} />
+            </Pressable>
+          ),
+        }}
+      />
       <FlatList
         data={documents}
         keyExtractor={(item) => item.id}
