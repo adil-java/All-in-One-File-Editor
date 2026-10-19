@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { router, Stack, useLocalSearchParams, useNavigation } from 'expo-router';
@@ -29,6 +28,7 @@ import {
   createDocument,
   getDocument,
   overwriteDocument,
+  pickPdfs,
   readDocumentBase64,
   shareBytes,
   shareDocument,
@@ -154,14 +154,11 @@ export default function EditorScreen() {
     });
 
   const mergePdf = async (afterIndex: number | null) => {
-    const picked = await DocumentPicker.getDocumentAsync({
-      type: 'application/pdf',
-      copyToCacheDirectory: true,
-    });
-    if (picked.canceled) return;
+    const [picked] = await pickPdfs();
+    if (!picked) return;
     await runBusy('Merging…', async () => {
       if (!base64) return;
-      const other = await new File(picked.assets[0].uri).base64();
+      const other = await new File(picked.uri).base64();
       const result = await appendDocument(base64, other);
       setBase64(result.base64);
       insertSourcePages(

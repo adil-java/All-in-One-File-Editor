@@ -3,8 +3,10 @@
  * `<documents>/pdfs`; the file name doubles as the document id.
  */
 
+import * as DocumentPicker from 'expo-document-picker';
 import { Directory, File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import { Platform } from 'react-native';
 
 export type PdfDocument = {
   id: string;
@@ -62,11 +64,26 @@ export function getDocument(id: string): PdfDocument | null {
   return file.exists ? toDocument(file) : null;
 }
 
-/** Copies a picked file (e.g. from the document picker cache) into the library. */
+/**
+ * Lets the user pick PDFs from the system file picker. Returns an empty list if canceled.
+ *
+ * On Android the picker's cache copy lives outside the directories Expo Go lets
+ * expo-file-system read ("Missing 'READ' permission"), so the original content://
+ * URI is used instead; content URIs are readable through `File`.
+ */
+export async function pickPdfs({ multiple = false } = {}) {
+  const result = await DocumentPicker.getDocumentAsync({
+    type: 'application/pdf',
+    copyToCacheDirectory: Platform.OS !== 'android',
+    multiple,
+  });
+  return result.canceled ? [] : result.assets.map(({ uri, name }) => ({ uri, name }));
+}
+
+/** Copies a picked file into the library. */
 export async function importDocument(sourceUri: string, name: string): Promise<PdfDocument> {
-  const target = uniqueFile(name);
-  await new File(sourceUri).copy(target);
-  return toDocument(target);
+  // Read and write rather than File.copy, which cannot copy from content:// URIs.
+  return createDocument(name, await new File(sourceUri).bytes());
 }
 
 export async function createDocument(name: string, bytes: Uint8Array): Promise<PdfDocument> {

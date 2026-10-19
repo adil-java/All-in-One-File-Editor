@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as DocumentPicker from 'expo-document-picker';
 import { router, Stack, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -17,6 +16,7 @@ import {
   formatSize,
   importDocument,
   listDocuments,
+  pickPdfs,
   type PdfDocument,
   renameDocument,
   shareDocument,
@@ -43,14 +43,8 @@ export default function HomeScreen() {
 
   const pickPdf = () =>
     run(async () => {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: 'application/pdf',
-        copyToCacheDirectory: true,
-        multiple: true,
-      });
-      if (result.canceled) return;
       const imported = [];
-      for (const asset of result.assets) {
+      for (const asset of await pickPdfs({ multiple: true })) {
         imported.push(await importDocument(asset.uri, asset.name));
       }
       if (imported.length === 1) openDocument(imported[0]);
