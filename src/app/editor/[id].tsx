@@ -26,6 +26,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { showActionSheet } from '@/lib/action-sheet';
 import {
   createDocument,
+  deleteDocument,
   getDocument,
   overwriteDocument,
   pickPdfs,
@@ -178,7 +179,24 @@ export default function EditorScreen() {
       { label: 'Manage pages', onPress: () => setManagingPages(true) },
       { label: 'Save as copy', onPress: saveCopy },
       { label: 'Share', onPress: share },
+      { label: 'Delete document', onPress: confirmDelete, destructive: true },
     ]);
+
+  const confirmDelete = () => {
+    if (!doc) return;
+    Alert.alert('Delete document?', `"${doc.name}" will be permanently removed.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          deleteDocument(doc.id);
+          leaving.current = true;
+          router.back();
+        },
+      },
+    ]);
+  };
 
   // Ask before leaving with unsaved edits. Re-dispatched actions pass through
   // because `leaving` is set first.

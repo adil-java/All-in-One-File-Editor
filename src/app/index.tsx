@@ -117,7 +117,13 @@ export default function HomeScreen() {
                 {formatSize(item.size)} · {formatDate(item.modifiedAt)}
               </Text>
             </View>
-            <Pressable hitSlop={12} onPress={() => showActions(item)}>
+            <Pressable
+              hitSlop={8}
+              onPress={() => confirmDelete(item)}
+              accessibilityLabel={`Delete ${item.name}`}>
+              <Ionicons name="trash-outline" size={20} color={theme.danger} />
+            </Pressable>
+            <Pressable hitSlop={8} onPress={() => showActions(item)}>
               <Ionicons name="ellipsis-horizontal" size={20} color={theme.textSecondary} />
             </Pressable>
           </Pressable>
