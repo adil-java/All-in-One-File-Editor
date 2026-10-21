@@ -1,15 +1,27 @@
 # PDF Editor
 
-A React Native PDF editor built with Expo (SDK 57). Import a PDF, mark it up, sign it,
-rearrange its pages, and save the result back as a real PDF. Everything runs on the
-device with no server and no network connection.
+An all-in-one document app built with Expo (SDK 57): edit PDFs, Word documents, Excel
+workbooks and PowerPoint presentations, and keep quick notes and to-do lists. Everything
+runs on the device with no server and no network connection.
 
 ## Features
 
-- **Library**: import PDFs and Word documents (.docx) from Files, create blank PDFs, and
-  rename, duplicate, share or delete documents.
+- **Library**: import PDF, Word (.docx), Excel (.xlsx) and PowerPoint (.pptx) files, create
+  blank PDFs, and rename, duplicate, share or delete documents.
+- **Open from other apps**: choose the app in "Open with" (Android) or the share sheet (iOS)
+  from WhatsApp, Files, email and so on. The file is added to the library and opened.
+  This needs a real build (EAS); Expo Go can't register file types.
 - **Word documents**: edit text with bold, italic, underline, headings, lists and alignment,
   then save as .docx or as a PDF (which opens in the PDF editor).
+- **Excel workbooks**: edit cells and formulas in a spreadsheet grid with sheet tabs, bold,
+  and add or remove rows and columns. Formatting, merged cells and column widths are kept,
+  common formulas (SUM, AVERAGE, MIN, MAX, COUNT, IF, ...) recalculate as you type, and
+  workbooks save as .xlsx or as a PDF.
+- **PowerPoint presentations**: slides are shown with their text, pictures and tables, and
+  every paragraph is editable. Saving rewrites only the changed text, so the design,
+  layouts and animations stay exactly as they were. Save as .pptx or as a PDF.
+- **Notes and to-dos**: quick notes and checklists with colors, pins and search, saved on
+  the device as you type.
 - **Annotate**: pen, highlighter, text, box, circle, line, arrow and whiteout tools,
   plus an eraser. Each tool has its own color and size settings.
 - **Edit the PDF's own text**: with the Edit text tool, tap highlighted text to change it.
@@ -73,10 +85,12 @@ src/
 
 - **Rendering.** [pdf.js](https://mozilla.github.io/pdf.js/) runs inside a hidden
   `react-native-webview` and rasterizes pages to JPEG on demand.
-- **Word documents.** [mammoth](https://github.com/mwilliamson/mammoth.js) converts .docx
-  to HTML inside a WebView, where it is edited. [docx](https://docx.js.org) rebuilds a .docx
-  from the edited HTML, and `expo-print` turns it into a PDF.
-- **Offline libraries.** pdf.js, mammoth and docx are inlined into git-ignored
+- **Office documents.** Each format is edited in a WebView. For Word,
+  [mammoth](https://github.com/mwilliamson/mammoth.js) converts .docx to HTML and
+  [docx](https://docx.js.org) rebuilds the file. Excel uses [ExcelJS](https://github.com/exceljs/exceljs).
+  PowerPoint files are unzipped with [JSZip](https://stuk.github.io/jszip/) and their slide
+  XML is edited directly. `expo-print` turns any of them into a PDF.
+- **Offline libraries.** pdf.js, mammoth, docx, ExcelJS and JSZip are inlined into git-ignored
   `*.generated.ts` modules by `scripts/bundle-web-libs.js` on `npm install`, so nothing is
   loaded from the network. If the files are missing, run `node scripts/bundle-web-libs.js`.
 - **Editing model.** The editor never changes the original PDF while you work. Each
@@ -102,4 +116,10 @@ src/
 - Password-protected PDFs aren't supported.
 - Word support keeps content and basic formatting (headings, bold/italic/underline, lists,
   tables, images, alignment), not exact Word layout: custom fonts, colors, text boxes,
-  headers and footers are lost. Old .doc files aren't supported.
+  headers and footers are lost. Old .doc, .xls and .ppt files aren't supported.
+- Excel: formulas outside the supported set (or referring to other sheets) keep their last
+  result until the file is opened in Excel, which recalculates on open. Charts, images and
+  pivot tables are not shown.
+- PowerPoint: slides are shown approximately (theme colors, shapes and charts aren't drawn),
+  and only existing text can be edited. Editing a paragraph applies its first run's
+  formatting to the whole paragraph.
