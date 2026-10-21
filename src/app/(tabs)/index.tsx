@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, FlatList, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { confirm } from '@/components/confirm-dialog';
 import { SpeedDial } from '@/components/speed-dial';
 import { TextPromptModal } from '@/components/text-prompt-modal';
 import { errorText, toast } from '@/components/toast';
@@ -68,10 +69,15 @@ export default function HomeScreen() {
   const openDocument = (doc: PdfDocument) => router.push(editorRouteFor(doc));
 
   const confirmDelete = (doc: PdfDocument) =>
-    Alert.alert('Delete document?', `"${doc.name}" will be permanently removed.`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => run(() => deleteDocument(doc.id)) },
-    ]);
+    confirm({
+      title: 'Delete document?',
+      message: `"${doc.name}" will be permanently removed.`,
+      tone: 'danger',
+      buttons: [
+        { label: 'Delete', style: 'destructive', onPress: () => run(() => deleteDocument(doc.id)) },
+        { label: 'Cancel', style: 'cancel' },
+      ],
+    });
 
   const showActions = (doc: PdfDocument) =>
     showActionSheet(doc.name, [

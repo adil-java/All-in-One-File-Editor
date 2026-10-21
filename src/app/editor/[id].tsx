@@ -5,7 +5,6 @@ import { router, Stack, useLocalSearchParams, useNavigation } from 'expo-router'
 import { type ComponentRef, useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   StyleSheet,
   Text,
@@ -29,6 +28,7 @@ import { PageManager } from '@/components/editor/page-manager';
 import { SelectionBar } from '@/components/editor/selection-bar';
 import { SignaturePad } from '@/components/editor/signature-pad';
 import { Toolbar } from '@/components/editor/toolbar';
+import { confirm } from '@/components/confirm-dialog';
 import { TextPromptModal } from '@/components/text-prompt-modal';
 import { errorText, toast } from '@/components/toast';
 import { Spacing } from '@/constants/theme';
@@ -236,18 +236,23 @@ export default function EditorScreen() {
 
   const confirmDelete = () => {
     if (!doc) return;
-    Alert.alert('Delete document?', `"${doc.name}" will be permanently removed.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
-          deleteDocument(doc.id);
-          leaving.current = true;
-          router.back();
+    confirm({
+      title: 'Delete document?',
+      message: `"${doc.name}" will be permanently removed.`,
+      tone: 'danger',
+      buttons: [
+        {
+          label: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            deleteDocument(doc.id);
+            leaving.current = true;
+            router.back();
+          },
         },
-      },
-    ]);
+        { label: 'Cancel', style: 'cancel' },
+      ],
+    });
   };
 
   // Ask before leaving with unsaved edits. Re-dispatched actions pass through
@@ -266,16 +271,22 @@ export default function EditorScreen() {
           leaving.current = true;
           navigation.dispatch(e.data.action);
         };
-        Alert.alert('Unsaved changes', 'Save your edits before leaving?', [
-          { text: 'Keep editing', style: 'cancel' },
-          { text: 'Discard', style: 'destructive', onPress: leave },
-          {
-            text: 'Save',
-            onPress: async () => {
-              if (await saveRef.current()) leave();
+        confirm({
+          title: 'Unsaved changes',
+          message: 'Save your edits before leaving?',
+          tone: 'warning',
+          buttons: [
+            {
+              label: 'Save',
+              style: 'primary',
+              onPress: async () => {
+                if (await saveRef.current()) leave();
+              },
             },
-          },
-        ]);
+            { label: 'Discard', style: 'destructive', onPress: leave },
+            { label: 'Keep editing', style: 'cancel' },
+          ],
+        });
       }),
     [navigation, preventLeave],
   );

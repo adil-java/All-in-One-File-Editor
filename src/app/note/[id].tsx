@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -13,6 +12,7 @@ import {
   View,
 } from 'react-native';
 
+import { confirm } from '@/components/confirm-dialog';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { makeId } from '@/lib/editor/types';
@@ -85,17 +85,22 @@ export default function NoteScreen() {
   };
 
   const confirmDelete = () =>
-    Alert.alert('Delete note?', undefined, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
-          deleteNote(note.id);
-          router.back();
+    confirm({
+      title: 'Delete note?',
+      message: 'This note will be permanently removed.',
+      tone: 'danger',
+      buttons: [
+        {
+          label: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            deleteNote(note.id);
+            router.back();
+          },
         },
-      },
-    ]);
+        { label: 'Cancel', style: 'cancel' },
+      ],
+    });
 
   const done = note.items.filter((item) => item.done).length;
 

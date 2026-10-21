@@ -5,7 +5,6 @@ import { router, Stack, useNavigation } from 'expo-router';
 import { type ComponentType, type Ref, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Platform,
   Pressable,
   StyleSheet,
@@ -17,6 +16,7 @@ import {
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
 import { Spacing } from '@/constants/theme';
+import { confirm } from '@/components/confirm-dialog';
 import { errorText, toast } from '@/components/toast';
 import { useTheme } from '@/hooks/use-theme';
 import { showActionSheet } from '@/lib/action-sheet';
@@ -211,16 +211,22 @@ export function OfficeEditorScreen({ id, config }: { id: string; config: OfficeE
           leaving.current = true;
           navigation.dispatch(e.data.action);
         };
-        Alert.alert('Unsaved changes', 'Save your edits before leaving?', [
-          { text: 'Keep editing', style: 'cancel' },
-          { text: 'Discard', style: 'destructive', onPress: leave },
-          {
-            text: 'Save',
-            onPress: async () => {
-              if (await saveRef.current()) leave();
+        confirm({
+          title: 'Unsaved changes',
+          message: 'Save your edits before leaving?',
+          tone: 'warning',
+          buttons: [
+            {
+              label: 'Save',
+              style: 'primary',
+              onPress: async () => {
+                if (await saveRef.current()) leave();
+              },
             },
-          },
-        ]);
+            { label: 'Discard', style: 'destructive', onPress: leave },
+            { label: 'Keep editing', style: 'cancel' },
+          ],
+        });
       }),
     [navigation, preventLeave],
   );
