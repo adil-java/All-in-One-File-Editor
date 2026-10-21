@@ -7,6 +7,7 @@
 
 import { File, Paths } from 'expo-file-system';
 import { useSyncExternalStore } from 'react';
+import { Share } from 'react-native';
 
 import { makeId } from '@/lib/editor/types';
 
@@ -134,4 +135,25 @@ export function noteMatches(note: Note, query: string) {
   return [note.title, note.body, ...note.items.map((i) => i.text)].some((text) =>
     text.toLowerCase().includes(q),
   );
+}
+
+/** A note as plain text for sharing; checklist items are written as ☐ / ☑. */
+export function noteToText(note: Note) {
+  const title = note.title.trim();
+  const content =
+    note.kind === 'note'
+      ? note.body.trim()
+      : note.items
+          .filter((item) => item.text.trim())
+          .map((item) => `${item.done ? '☑' : '☐'} ${item.text.trim()}`)
+          .join('\n');
+  return [title, content].filter(Boolean).join('\n\n');
+}
+
+/** Opens the system share sheet (WhatsApp, Messages, email, ...) with the note's text. */
+export async function shareNote(note: Note) {
+  const message = noteToText(note);
+  if (!message) return false;
+  await Share.share({ message, title: note.title.trim() || undefined });
+  return true;
 }

@@ -4,9 +4,20 @@ import { useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { confirm } from '@/components/confirm-dialog';
+import { errorText, toast } from '@/components/toast';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { createNote, type Note, noteMatches, useNotes } from '@/lib/notes';
+import { showActionSheet } from '@/lib/action-sheet';
+import {
+  createNote,
+  deleteNote,
+  type Note,
+  noteMatches,
+  shareNote,
+  updateNote,
+  useNotes,
+} from '@/lib/notes';
 
 const INK = '#1F2328';
 const INK_SECONDARY = '#59636E';
@@ -21,6 +32,39 @@ export function NotesList() {
 
   const open = (note: Note) => router.push({ pathname: '/note/[id]', params: { id: note.id } });
   const create = (kind: Note['kind']) => open(createNote(kind));
+
+  const share = async (note: Note) => {
+    try {
+      if (!(await shareNote(note)))
+        toast.show({ title: 'Nothing to share yet', message: 'This note is empty.' });
+    } catch (error) {
+      toast.error('Could not share', errorText(error));
+    }
+  };
+
+  /** Long-press menu on a note card. */
+  const showActions = (note: Note) =>
+    showActionSheet(note.title.trim() || 'Note', [
+      { label: 'Share', onPress: () => share(note) },
+      {
+        label: note.pinned ? 'Unpin' : 'Pin to top',
+        onPress: () => updateNote(note.id, { pinned: !note.pinned }),
+      },
+      {
+        label: 'Delete',
+        destructive: true,
+        onPress: () =>
+          confirm({
+            title: 'Delete note?',
+            message: 'This note will be permanently removed.',
+            tone: 'danger',
+            buttons: [
+              { label: 'Delete', style: 'destructive', onPress: () => deleteNote(note.id) },
+              { label: 'Cancel', style: 'cancel' },
+            ],
+          }),
+      },
+    ]);
 
   return (
     <View style={styles.container}>
@@ -62,7 +106,9 @@ export function NotesList() {
             )}
           </View>
         }
-        renderItem={({ item }) => <NoteCard note={item} onPress={() => open(item)} />}
+        renderItem={({ item }) => (
+          <NoteCard note={item} onPress={() => open(item)} onLongPress={() => showActions(item)} />
+        )}
       />
 
       <View style={[styles.actions, { bottom: insets.bottom + Spacing.four }]}>
@@ -83,7 +129,15 @@ export function NotesList() {
   );
 }
 
-function NoteCard({ note, onPress }: { note: Note; onPress: () => void }) {
+function NoteCard({
+  note,
+  onPress,
+  onLongPress,
+}: {
+  note: Note;
+  onPress: () => void;
+  onLongPress: () => void;
+}) {
   const theme = useTheme();
   const ink = note.color ? INK : theme.text;
   const inkSecondary = note.color ? INK_SECONDARY : theme.textSecondary;
@@ -93,6 +147,7 @@ function NoteCard({ note, onPress }: { note: Note; onPress: () => void }) {
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={onLongPress}
       style={({ pressed }) => [
         styles.card,
         {

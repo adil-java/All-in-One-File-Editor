@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 
 import { confirm } from '@/components/confirm-dialog';
+import { errorText, toast } from '@/components/toast';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { makeId } from '@/lib/editor/types';
@@ -21,6 +22,7 @@ import {
   deleteIfEmpty,
   deleteNote,
   NOTE_COLORS,
+  shareNote,
   updateNote,
   useNote,
 } from '@/lib/notes';
@@ -102,6 +104,15 @@ export default function NoteScreen() {
       ],
     });
 
+  const share = async () => {
+    try {
+      if (!(await shareNote(note)))
+        toast.show({ title: 'Nothing to share yet', message: 'Add some text first.' });
+    } catch (error) {
+      toast.error('Could not share', errorText(error));
+    }
+  };
+
   const done = note.items.filter((item) => item.done).length;
 
   return (
@@ -116,6 +127,9 @@ export default function NoteScreen() {
           headerTintColor: ink,
           headerRight: () => (
             <View style={styles.headerActions}>
+              <Pressable onPress={share} hitSlop={8} accessibilityLabel="Share note">
+                <Ionicons name="share-outline" size={22} color={ink} />
+              </Pressable>
               <Pressable onPress={() => updateNote(note.id, { pinned: !note.pinned })} hitSlop={8}>
                 <Ionicons name={note.pinned ? 'pin' : 'pin-outline'} size={22} color={ink} />
               </Pressable>
