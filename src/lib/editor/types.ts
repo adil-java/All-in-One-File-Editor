@@ -54,6 +54,8 @@ export type TextAnnotation = Base & {
   color: string;
   /** Defaults to 'sans'. */
   font?: TextFont;
+  bold?: boolean;
+  italic?: boolean;
 };
 
 export type ImageAnnotation = Base &

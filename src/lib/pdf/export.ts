@@ -20,10 +20,23 @@ import { BASELINE, LINE_HEIGHT, textLines } from '@/lib/editor/geometry';
 import { arrowHead, denormalize, inkPath } from '@/lib/editor/paths';
 import type { Annotation, EditorPage, Point, TextFont } from '@/lib/editor/types';
 
-const STANDARD_FONTS: Record<TextFont, StandardFonts> = {
-  sans: StandardFonts.Helvetica,
-  serif: StandardFonts.TimesRoman,
-  mono: StandardFonts.Courier,
+/** Standard PDF fonts by family, indexed by [bold][italic]. */
+const STANDARD_FONTS: Record<
+  TextFont,
+  [[StandardFonts, StandardFonts], [StandardFonts, StandardFonts]]
+> = {
+  sans: [
+    [StandardFonts.Helvetica, StandardFonts.HelveticaOblique],
+    [StandardFonts.HelveticaBold, StandardFonts.HelveticaBoldOblique],
+  ],
+  serif: [
+    [StandardFonts.TimesRoman, StandardFonts.TimesRomanItalic],
+    [StandardFonts.TimesRomanBold, StandardFonts.TimesRomanBoldItalic],
+  ],
+  mono: [
+    [StandardFonts.Courier, StandardFonts.CourierOblique],
+    [StandardFonts.CourierBold, StandardFonts.CourierBoldOblique],
+  ],
 };
 
 function color(hex: string) {
@@ -109,7 +122,7 @@ function encodable(text: string, font: PDFFont) {
 
 type Resources = {
   doc: PDFDocument;
-  fonts: Map<TextFont, PDFFont>;
+  fonts: Map<StandardFonts, PDFFont>;
   images: Map<string, PDFImage>;
 };
 
@@ -124,11 +137,19 @@ async function embedImage(uri: string, resources: Resources) {
   return image;
 }
 
-async function embedFont(font: TextFont, resources: Resources) {
-  let embedded = resources.fonts.get(font);
+async function embedFont(
+  {
+    font = 'sans',
+    bold = false,
+    italic = false,
+  }: { font?: TextFont; bold?: boolean; italic?: boolean },
+  resources: Resources,
+) {
+  const standard = STANDARD_FONTS[font][bold ? 1 : 0][italic ? 1 : 0];
+  let embedded = resources.fonts.get(standard);
   if (!embedded) {
-    embedded = await resources.doc.embedFont(STANDARD_FONTS[font]);
-    resources.fonts.set(font, embedded);
+    embedded = await resources.doc.embedFont(standard);
+    resources.fonts.set(standard, embedded);
   }
   return embedded;
 }
@@ -206,7 +227,7 @@ async function drawAnnotation(page: PDFPage, a: Annotation, resources: Resources
       }
       break;
     case 'text': {
-      const font = await embedFont(a.font ?? 'sans', resources);
+      const font = await embedFont(a, resources);
       textLines(a.text).forEach((line, i) => {
         const origin = map({ x: a.x, y: a.y + a.fontSize * (BASELINE + i * LINE_HEIGHT) });
         page.drawText(encodable(line, font), {

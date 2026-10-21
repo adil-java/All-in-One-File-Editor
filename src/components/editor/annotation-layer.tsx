@@ -154,6 +154,8 @@ const AnnotationShape = memo(function AnnotationShape({
               y={a.y + a.fontSize * (BASELINE + i * LINE_HEIGHT)}
               fontSize={a.fontSize}
               fontFamily={FONT_FAMILIES[a.font ?? 'sans']}
+              fontWeight={a.bold ? 'bold' : 'normal'}
+              fontStyle={a.italic ? 'italic' : 'normal'}
               fill={a.color}>
               {line}
             </Text>

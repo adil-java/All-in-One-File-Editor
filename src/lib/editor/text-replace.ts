@@ -1,6 +1,7 @@
 /**
  * "Editing" text that is part of the PDF: the original run is covered with a
- * white box and the new text is drawn on top at the same position and size.
+ * box in the page's background color and the new text is drawn on top at the
+ * same position and size, matching the original's font style and color.
  */
 
 import type { PdfTextItem } from '@/lib/pdf-renderer/use-pdf-renderer';
@@ -18,10 +19,22 @@ export function textItemBox(item: PdfTextItem): Rect {
   };
 }
 
-/** Maps pdf.js's CSS generic family to the closest standard PDF font. */
-export function fontFromFamily(family: string): TextFont {
-  if (family.includes('monospace')) return 'mono';
-  if (family.includes('serif') && !family.includes('sans')) return 'serif';
+const MONO_FONT = /courier|mono|consol|menlo|inconsolata|code|typewriter/i;
+const SERIF_FONT = /times|roman|serif|georgia|garamond|cambria|book|minion|palatino|baskerville/i;
+const SANS_FONT = /sans|arial|helvetica|calibri|verdana|segoe|roboto|tahoma|gothic|grotesk/i;
+
+/**
+ * Picks the closest standard PDF font for a text run, from the PDF font's name
+ * when it is recognizable, otherwise from pdf.js's CSS generic family.
+ */
+export function fontFor(item: Pick<PdfTextItem, 'fontName' | 'fontFamily'>): TextFont {
+  // Drop the subset prefix, e.g. "ABCDEF+Calibri-Bold" -> "Calibri-Bold".
+  const name = item.fontName.replace(/^[A-Z]{6}\+/, '');
+  if (MONO_FONT.test(name)) return 'mono';
+  if (SANS_FONT.test(name)) return 'sans';
+  if (SERIF_FONT.test(name)) return 'serif';
+  if (item.fontFamily.includes('monospace')) return 'mono';
+  if (item.fontFamily.includes('serif') && !item.fontFamily.includes('sans')) return 'serif';
   return 'sans';
 }
 
@@ -31,9 +44,10 @@ export function replaceTextAnnotations(item: PdfTextItem, text: string): Annotat
       id: makeId(),
       type: 'rect',
       ...textItemBox(item),
-      color: '#FFFFFF',
+      // Cover with the page's own background color around the text.
+      color: item.background,
       strokeWidth: 0,
-      fill: '#FFFFFF',
+      fill: item.background,
       opacity: 1,
     },
     {
@@ -43,8 +57,10 @@ export function replaceTextAnnotations(item: PdfTextItem, text: string): Annotat
       y: item.baseline - item.fontSize * BASELINE,
       text,
       fontSize: item.fontSize,
-      color: '#000000',
-      font: fontFromFamily(item.fontFamily),
+      color: item.color,
+      font: fontFor(item),
+      bold: item.bold,
+      italic: item.italic,
     },
   ];
 }

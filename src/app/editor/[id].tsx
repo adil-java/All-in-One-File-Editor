@@ -54,6 +54,7 @@ import { A4, appendBlankPage, appendDocument } from '@/lib/pdf/pages';
 import type { Signature } from '@/lib/signatures';
 import {
   type PageInfo,
+  type PdfFieldWidget,
   PdfRendererProvider,
   usePdfRenderer,
 } from '@/lib/pdf-renderer/use-pdf-renderer';
@@ -92,6 +93,8 @@ export default function EditorScreen() {
   // Fillable form fields of the current source document.
   const [formFields, setFormFields] = useState<FormField[]>([]);
   const [editingForm, setEditingForm] = useState(false);
+  // Text form field being edited after tapping it on the page.
+  const [fieldEdit, setFieldEdit] = useState<{ name: string; value: string } | null>(null);
   // Form values are written straight into the source, outside undo history.
   const [formDirty, setFormDirty] = useState(false);
   const dirty = history.dirty || formDirty;
@@ -135,6 +138,21 @@ export default function EditorScreen() {
       setBase64(await applyFormValues(base64, values, { flatten }));
       setFormDirty(true);
     });
+
+  /** Tapping a form field on the page with the Edit text tool. */
+  const onFieldTap = (widget: PdfFieldWidget) => {
+    const field = formFields.find((f) => f.name === widget.name);
+    if (!field || field.readOnly) return;
+    if (field.type === 'text') {
+      setFieldEdit({ name: field.name, value: field.value });
+    } else if (field.type === 'checkbox') {
+      applyForm({ [field.name]: !field.value }, false);
+    } else if (widget.kind === 'radio' && widget.option) {
+      applyForm({ [field.name]: widget.option }, false);
+    } else {
+      setEditingForm(true);
+    }
+  };
 
   const saveCopy = () =>
     runBusy('Saving copy…', async () => {
@@ -524,7 +542,7 @@ export default function EditorScreen() {
                     style={{ width: contentWidth }}
                     contentContainerStyle={styles.list}
                     scrollEnabled={!isDrawingTool(tool)}
-                    extraData={[tool, settings, selection, renderer.pages, pageWidth]}
+                    extraData={[tool, settings, selection, renderer.pages, pageWidth, formFields]}
                     onViewableItemsChanged={onViewableItemsChanged}
                     viewabilityConfig={VIEWABILITY_CONFIG}
                     renderItem={({ item }) => {
@@ -540,6 +558,7 @@ export default function EditorScreen() {
                           selectedId={selection?.pageKey === item.key ? selection.id : null}
                           onSelect={onSelect}
                           onTextRequest={setTextRequest}
+                          onFieldTap={onFieldTap}
                           dispatch={dispatch}
                         />
                       );
@@ -629,6 +648,19 @@ export default function EditorScreen() {
           visible={signing}
           onCancel={() => setSigning(false)}
           onDone={insertSignature}
+        />
+        <TextPromptModal
+          visible={fieldEdit !== null}
+          title={fieldEdit ? `Edit "${fieldEdit.name}"` : ''}
+          initialValue={fieldEdit?.value}
+          placeholder="Type a value…"
+          confirmLabel="Done"
+          onCancel={() => setFieldEdit(null)}
+          onSubmit={(value) => {
+            const name = fieldEdit!.name;
+            setFieldEdit(null);
+            applyForm({ [name]: value }, false);
+          }}
         />
         <TextPromptModal
           visible={textRequest !== null}

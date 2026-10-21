@@ -28,6 +28,8 @@ import {
 import { textItemBox } from '@/lib/editor/text-replace';
 import {
   type PageInfo,
+  type PdfFieldWidget,
+  type PdfPageText,
   type PdfTextItem,
   usePdfRendererContext,
 } from '@/lib/pdf-renderer/use-pdf-renderer';
@@ -49,6 +51,8 @@ type Props = {
   selectedId: string | null;
   onSelect: (pageKey: string, id: string | null) => void;
   onTextRequest: (request: TextRequest) => void;
+  /** A fillable form field was tapped with the Edit text tool. */
+  onFieldTap: (field: PdfFieldWidget) => void;
   dispatch: (action: EditorAction) => void;
 };
 
@@ -73,6 +77,7 @@ export const PageEditor = memo(function PageEditor({
   selectedId,
   onSelect,
   onTextRequest,
+  onFieldTap,
   dispatch,
 }: Props) {
   const display = rotatedSize(info.width, info.height, page.rotation);
@@ -91,24 +96,24 @@ export const PageEditor = memo(function PageEditor({
     draft: null,
   });
 
-  // Text runs of the PDF page, loaded while the Edit text tool is active.
-  const { status, generation, getTextItems } = usePdfRendererContext();
-  const [pdfText, setPdfText] = useState<{ key: string; items: PdfTextItem[] } | null>(null);
+  // Text runs and form fields of the PDF page, loaded while the Edit text tool is active.
+  const { status, generation, getPageText } = usePdfRendererContext();
+  const [pdfText, setPdfText] = useState<{ key: string; text: PdfPageText } | null>(null);
   const pdfTextKey = `${generation}:${page.sourceIndex}`;
-  const textItems = tool === 'edit-text' && pdfText?.key === pdfTextKey ? pdfText.items : null;
+  const pageText = tool === 'edit-text' && pdfText?.key === pdfTextKey ? pdfText.text : null;
 
   useEffect(() => {
     if (tool !== 'edit-text' || status !== 'loaded') return;
     let cancelled = false;
-    getTextItems(page.sourceIndex)
-      .then((items) => {
-        if (!cancelled) setPdfText({ key: pdfTextKey, items });
+    getPageText(page.sourceIndex)
+      .then((text) => {
+        if (!cancelled) setPdfText({ key: pdfTextKey, text });
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [tool, status, getTextItems, page.sourceIndex, pdfTextKey]);
+  }, [tool, status, getPageText, page.sourceIndex, pdfTextKey]);
 
   const toBase = (x: number, y: number) =>
     displayToBase({ x: x * pointsPerPixel, y: y * pointsPerPixel }, info, page.rotation);
@@ -251,12 +256,15 @@ export const PageEditor = memo(function PageEditor({
       const p = toBase(e.x, e.y);
       const hit = findAnnotationAt(page.annotations, p, slop);
       if (tool === 'edit-text') {
-        // Text added in the editor (including earlier replacements) wins over the PDF's own.
+        // Form fields first, then text added in the editor (including earlier
+        // replacements), then the PDF's own text.
+        const field = pageText?.fields.find((f) => !f.readOnly && containsPoint(f, p, slop / 2));
+        if (field) return onFieldTap(field);
         if (hit?.type === 'text') return onTextRequest({ pageKey: page.key, annotation: hit });
-        const item = textItems
-          ?.slice()
+        const item = pageText?.items
+          .slice()
           .reverse()
-          .find((t) => containsPoint(textItemBox(t), p, slop / 2));
+          .find((t: PdfTextItem) => containsPoint(textItemBox(t), p, slop / 2));
         if (item) onTextRequest({ pageKey: page.key, replace: item });
       } else if (tool === 'select') {
         onSelect(page.key, hit?.id ?? null);
@@ -287,7 +295,14 @@ export const PageEditor = memo(function PageEditor({
             annotations={annotations}
             draft={editing ? null : draft?.annotation}
             selectedId={tool === 'select' ? selectedId : null}
-            hints={textItems?.map(textItemBox)}
+            hints={
+              pageText
+                ? [
+                    ...pageText.items.map(textItemBox),
+                    ...pageText.fields.filter((f) => !f.readOnly),
+                  ]
+                : undefined
+            }
             base={info}
             rotation={page.rotation}
             width={width}

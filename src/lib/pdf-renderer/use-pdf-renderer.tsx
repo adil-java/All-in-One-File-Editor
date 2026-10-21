@@ -27,7 +27,29 @@ export type PdfTextItem = {
   fontSize: number;
   /** CSS generic family reported by pdf.js, e.g. 'sans-serif', 'serif', 'monospace'. */
   fontFamily: string;
+  /** PostScript name of the PDF font, e.g. 'ABCDEF+Arial-BoldMT'. */
+  fontName: string;
+  bold: boolean;
+  italic: boolean;
+  /** Ink and background colors sampled from the rendered page, as #rrggbb. */
+  color: string;
+  background: string;
 };
+
+/** A fillable form field widget on a page, in base page coordinates. */
+export type PdfFieldWidget = {
+  name: string;
+  kind: 'text' | 'checkbox' | 'radio' | 'choice';
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** The radio option this widget selects. */
+  option: string | null;
+  readOnly: boolean;
+};
+
+export type PdfPageText = { items: PdfTextItem[]; fields: PdfFieldWidget[] };
 
 export type PdfRenderer = {
   status: 'loading' | 'loaded' | 'error';
@@ -38,8 +60,8 @@ export type PdfRenderer = {
   /** Renders a page to a JPEG data URL `width` pixels wide. */
   renderPage: (index: number, width: number, extraRotation: number) => Promise<string>;
   getCachedPage: (index: number, width: number, extraRotation: number) => string | undefined;
-  /** Extracts the text runs of a source page. */
-  getTextItems: (index: number) => Promise<PdfTextItem[]>;
+  /** Extracts the text runs and form field widgets of a source page. */
+  getPageText: (index: number) => Promise<PdfPageText>;
   /** Hidden WebView hosting pdf.js; must be mounted for rendering to work. */
   element: ReactElement;
 };
@@ -52,7 +74,7 @@ type Message =
   | { type: 'load-error'; token: number; message: string }
   | { type: 'rendered'; requestId: number; dataUrl: string }
   | { type: 'render-error'; requestId: number; message: string }
-  | { type: 'text'; requestId: number; items: PdfTextItem[] }
+  | ({ type: 'text'; requestId: number } & PdfPageText)
   | { type: 'text-error'; requestId: number; message: string };
 
 const MAX_CACHED_PAGES = 40;
@@ -89,7 +111,7 @@ export function usePdfRenderer(
     new Map<number, { resolve: (value: never) => void; reject: (error: Error) => void }>(),
   );
   const cache = useRef(new Map<string, string>());
-  const textCache = useRef(new Map<number, Promise<PdfTextItem[]>>());
+  const textCache = useRef(new Map<number, Promise<PdfPageText>>());
 
   useEffect(() => {
     onLoadedRef.current = onLoaded;
@@ -128,7 +150,11 @@ export function usePdfRenderer(
       case 'text': {
         const request = pending.current.get(message.requestId);
         pending.current.delete(message.requestId);
-        request?.resolve((message.type === 'text' ? message.items : message.dataUrl) as never);
+        request?.resolve(
+          (message.type === 'text'
+            ? { items: message.items, fields: message.fields }
+            : message.dataUrl) as never,
+        );
         break;
       }
       case 'render-error':
@@ -170,11 +196,11 @@ export function usePdfRenderer(
     });
   }, []);
 
-  const getTextItems = useCallback((index: number) => {
+  const getPageText = useCallback((index: number) => {
     let items = textCache.current.get(index);
     if (!items) {
       const requestId = nextRequestId.current++;
-      items = new Promise<PdfTextItem[]>((resolve, reject) => {
+      items = new Promise<PdfPageText>((resolve, reject) => {
         pending.current.set(requestId, { resolve, reject });
         webView.current?.injectJavaScript(`window.__text(${requestId}, ${index}); true;`);
       });
@@ -208,7 +234,7 @@ export function usePdfRenderer(
     generation,
     renderPage,
     getCachedPage,
-    getTextItems,
+    getPageText,
     element,
   };
 }
