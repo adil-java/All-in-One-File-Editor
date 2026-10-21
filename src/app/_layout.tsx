@@ -33,7 +33,7 @@ export default function RootLayout() {
             headerTintColor: theme.text,
             contentStyle: { backgroundColor: theme.background },
           }}>
-          <Stack.Screen name="index" options={{ title: 'PDF Editor' }} />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         </Stack>
         <StatusBar style="auto" />
       </ThemeProvider>
