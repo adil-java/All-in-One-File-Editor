@@ -157,3 +157,11 @@ export async function shareNote(note: Note) {
   await Share.share({ message, title: note.title.trim() || undefined });
   return true;
 }
+
+/** Shares several notes as one message, separated by a divider line. */
+export async function shareNotes(selected: Note[]) {
+  const message = selected.map(noteToText).filter(Boolean).join('\n\n———\n\n');
+  if (!message) return false;
+  await Share.share({ message });
+  return true;
+}
