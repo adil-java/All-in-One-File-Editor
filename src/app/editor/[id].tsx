@@ -30,6 +30,7 @@ import { SelectionBar } from '@/components/editor/selection-bar';
 import { SignaturePad } from '@/components/editor/signature-pad';
 import { Toolbar } from '@/components/editor/toolbar';
 import { TextPromptModal } from '@/components/text-prompt-modal';
+import { errorText, toast } from '@/components/toast';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { showActionSheet } from '@/lib/action-sheet';
@@ -112,7 +113,7 @@ export default function EditorScreen() {
       await task();
       return true;
     } catch (error) {
-      Alert.alert('Something went wrong', error instanceof Error ? error.message : String(error));
+      toast.error('Something went wrong', errorText(error));
       return false;
     } finally {
       setBusy(null);
@@ -129,6 +130,7 @@ export default function EditorScreen() {
       dispatch({ type: 'reset', pages: pagesFromSource(pages.length) });
       setFormDirty(false);
       setBase64(await readDocumentBase64(doc.id));
+      toast.success('Saved', 'Your edits are now part of the PDF.');
     });
 
   const applyForm = (values: Record<string, FormValue>, flatten: boolean) =>
@@ -158,16 +160,18 @@ export default function EditorScreen() {
     runBusy('Saving copy…', async () => {
       if (!doc || !base64) return;
       const copy = await createDocument(`${doc.name} edited`, await exportPdf(base64, pages));
-      Alert.alert('Saved', `Saved as "${copy.name}".`, [
-        { text: 'Stay here', style: 'cancel' },
-        {
-          text: 'Open copy',
+      toast.show({
+        type: 'success',
+        title: 'Copy saved',
+        message: `"${copy.name}" was added to your documents.`,
+        action: {
+          label: 'Open',
           onPress: () => {
             leaving.current = true;
             router.replace({ pathname: '/editor/[id]', params: { id: copy.id } });
           },
         },
-      ]);
+      });
     });
 
   const share = () =>
@@ -362,7 +366,7 @@ export default function EditorScreen() {
     const asset = result.canceled ? null : result.assets[0];
     if (!asset?.base64) return;
     if (!asset.width || !asset.height) {
-      Alert.alert('Unsupported image', 'Could not read the size of this image.');
+      toast.error('Unsupported image', 'Could not read the size of this image.');
       return;
     }
     const aspect = asset.width / asset.height;

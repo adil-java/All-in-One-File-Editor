@@ -4,7 +4,9 @@ import { useCallback, useState } from 'react';
 import { Alert, FlatList, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { SpeedDial } from '@/components/speed-dial';
 import { TextPromptModal } from '@/components/text-prompt-modal';
+import { errorText, toast } from '@/components/toast';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { showActionSheet } from '@/lib/action-sheet';
@@ -46,7 +48,7 @@ export default function HomeScreen() {
     try {
       await task();
     } catch (error) {
-      Alert.alert('Something went wrong', error instanceof Error ? error.message : String(error));
+      toast.error('Something went wrong', errorText(error));
     }
     refresh();
   };
@@ -62,16 +64,6 @@ export default function HomeScreen() {
 
   const createNew = (kind: DocumentKind) =>
     run(async () => openDocument(await createBlankDocument(kind)));
-
-  /** The "New" button: import from the device or start a blank document. */
-  const showNewMenu = () =>
-    showActionSheet('New', [
-      { label: 'Import from device', onPress: importFromDevice },
-      { label: 'New PDF', onPress: () => createNew('pdf') },
-      { label: 'New Word document', onPress: () => createNew('docx') },
-      { label: 'New Excel workbook', onPress: () => createNew('xlsx') },
-      { label: 'New PowerPoint presentation', onPress: () => createNew('pptx') },
-    ]);
 
   const openDocument = (doc: PdfDocument) => router.push(editorRouteFor(doc));
 
@@ -91,6 +83,9 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
+      <Text style={[styles.pageTitle, { color: theme.text, paddingTop: insets.top + Spacing.two }]}>
+        Files
+      </Text>
       <FlatList
         data={documents}
         keyExtractor={(item) => item.id}
@@ -140,19 +135,41 @@ export default function HomeScreen() {
         )}
       />
 
-      <Pressable
-        onPress={showNewMenu}
-        style={({ pressed }) => [
-          styles.fab,
+      <SpeedDial
+        label="New"
+        actions={[
           {
-            backgroundColor: theme.tint,
-            bottom: insets.bottom + Spacing.four,
-            opacity: pressed ? 0.85 : 1,
+            label: 'Import from device',
+            icon: 'folder-open',
+            color: '#5B6475',
+            onPress: importFromDevice,
           },
-        ]}>
-        <Ionicons name="add" size={22} color={theme.tintText} />
-        <Text style={[styles.fabText, { color: theme.tintText }]}>New</Text>
-      </Pressable>
+          {
+            label: 'New PDF',
+            icon: 'document-text',
+            color: '#E5383B',
+            onPress: () => createNew('pdf'),
+          },
+          {
+            label: 'Word document',
+            icon: 'document',
+            color: '#2B579A',
+            onPress: () => createNew('docx'),
+          },
+          {
+            label: 'Excel workbook',
+            icon: 'grid',
+            color: '#1D7A45',
+            onPress: () => createNew('xlsx'),
+          },
+          {
+            label: 'PowerPoint',
+            icon: 'easel',
+            color: '#D35230',
+            onPress: () => createNew('pptx'),
+          },
+        ]}
+      />
 
       <TextPromptModal
         visible={renaming !== null}
@@ -171,6 +188,7 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  pageTitle: { fontSize: 30, fontWeight: '800', paddingHorizontal: Spacing.three },
   list: { padding: Spacing.three, gap: Spacing.two },
   emptyList: { flexGrow: 1, justifyContent: 'center' },
   logo: { width: 96, height: 96, marginBottom: Spacing.one },

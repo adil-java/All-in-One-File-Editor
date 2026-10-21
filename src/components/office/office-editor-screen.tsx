@@ -17,6 +17,7 @@ import {
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
 import { Spacing } from '@/constants/theme';
+import { errorText, toast } from '@/components/toast';
 import { useTheme } from '@/hooks/use-theme';
 import { showActionSheet } from '@/lib/action-sheet';
 import {
@@ -144,7 +145,7 @@ export function OfficeEditorScreen({ id, config }: { id: string; config: OfficeE
       await task();
       return true;
     } catch (e) {
-      Alert.alert('Something went wrong', e instanceof Error ? e.message : String(e));
+      toast.error('Something went wrong', errorText(e));
       return false;
     } finally {
       setBusy(null);
@@ -156,6 +157,7 @@ export function OfficeEditorScreen({ id, config }: { id: string; config: OfficeE
       if (!doc) return;
       await overwriteDocument(doc.id, base64ToBytes(await request('file')));
       setDirty(false);
+      toast.success('Saved');
     });
 
   const saveAsPdf = () =>
@@ -169,13 +171,15 @@ export function OfficeEditorScreen({ id, config }: { id: string; config: OfficeE
           config.kind === 'docx' && { margins: { top: 57, bottom: 57, left: 51, right: 51 } }),
       });
       const pdf = await createDocument(doc.name, await new File(uri).bytes(), 'pdf');
-      Alert.alert('Saved as PDF', `"${pdf.name}" was added to your documents.`, [
-        { text: 'Stay here', style: 'cancel' },
-        {
-          text: 'Open PDF',
+      toast.show({
+        type: 'success',
+        title: 'Saved as PDF',
+        message: `"${pdf.name}" was added to your documents.`,
+        action: {
+          label: 'Open',
           onPress: () => router.push({ pathname: '/editor/[id]', params: { id: pdf.id } }),
         },
-      ]);
+      });
     });
 
   const share = () =>

@@ -24,6 +24,9 @@ export function NotesList() {
 
   return (
     <View style={styles.container}>
+      <Text style={[styles.pageTitle, { color: theme.text, paddingTop: insets.top + Spacing.two }]}>
+        Notes
+      </Text>
       <View style={[styles.search, { backgroundColor: theme.backgroundElement }]}>
         <Ionicons name="search" size={18} color={theme.textSecondary} />
         <TextInput
@@ -141,6 +144,7 @@ function NoteCard({ note, onPress }: { note: Note; onPress: () => void }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  pageTitle: { fontSize: 30, fontWeight: '800', paddingHorizontal: Spacing.three },
   search: {
     flexDirection: 'row',
     alignItems: 'center',

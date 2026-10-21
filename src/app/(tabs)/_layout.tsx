@@ -8,8 +8,8 @@ export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
-        headerStyle: { backgroundColor: theme.backgroundElement },
-        headerTintColor: theme.text,
+        // No header bar: each tab shows its own title in the page.
+        headerShown: false,
         tabBarActiveTintColor: theme.tint,
         tabBarInactiveTintColor: theme.textSecondary,
         tabBarStyle: { backgroundColor: theme.backgroundElement, borderTopColor: theme.border },
