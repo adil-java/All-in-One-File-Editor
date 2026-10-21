@@ -23,6 +23,7 @@
     "expo-symbols": "~57.0.3",
     "expo-system-ui": "~57.0.4",
     "expo-web-browser": "~57.0.3",
+    "jszip": "^3.10.2",
     "pdf-lib": "^1.17.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -42,7 +43,6 @@
     "eslint": "^9.0.0",
     "eslint-config-expo": "~57.0.2",
     "exceljs": "^4.4.0",
-    "jszip": "^3.10.2",
     "mammoth": "^1.8.0",
     "pdfjs-dist": "^3.11.174",
     "typescript": "~6.0.3"
