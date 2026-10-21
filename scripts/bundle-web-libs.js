@@ -4,6 +4,7 @@
  * them work offline, without loading scripts from a CDN:
  *   - pdf.js (PDF rendering)          -> src/lib/pdf-renderer/pdfjs-source.generated.ts
  *   - mammoth + docx (Word documents) -> src/lib/word/word-source.generated.ts
+ *   - ExcelJS + JSZip (Excel, PowerPoint) -> src/lib/office/office-source.generated.ts
  * Runs automatically on `npm install` (postinstall).
  */
 
@@ -37,4 +38,9 @@ writeModule('src/lib/pdf-renderer/pdfjs-source.generated.ts', {
 writeModule('src/lib/word/word-source.generated.ts', {
   MAMMOTH_LIB: 'mammoth/mammoth.browser.min.js',
   DOCX_LIB: 'docx/build/index.iife.js',
+});
+
+writeModule('src/lib/office/office-source.generated.ts', {
+  EXCELJS_LIB: 'exceljs/dist/exceljs.min.js',
+  JSZIP_LIB: 'jszip/dist/jszip.min.js',
 });

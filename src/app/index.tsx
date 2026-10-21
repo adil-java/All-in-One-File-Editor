@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router, Stack, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Alert, FlatList, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,7 +9,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { showActionSheet } from '@/lib/action-sheet';
 import {
-  createDocument,
+  createBlankDocument,
   deleteDocument,
   duplicateDocument,
   formatDate,
@@ -20,10 +20,18 @@ import {
   type PdfDocument,
   renameDocument,
   shareDocument,
+  ALL_KINDS,
+  type DocumentKind,
+  editorRouteFor,
 } from '@/lib/documents';
-import { createBlankPdf } from '@/lib/pdf/pages';
 
-const WORD_BLUE = '#2B579A';
+/** File icon label and color per document kind. */
+const FILE_BADGES: Record<DocumentKind, { label: string; color: string }> = {
+  pdf: { label: 'PDF', color: '#E5383B' },
+  docx: { label: 'DOC', color: '#2B579A' },
+  xlsx: { label: 'XLS', color: '#1D7A45' },
+  pptx: { label: 'PPT', color: '#D35230' },
+};
 
 export default function HomeScreen() {
   const theme = useTheme();
@@ -43,23 +51,29 @@ export default function HomeScreen() {
     refresh();
   };
 
-  const pickPdf = () =>
+  const importFromDevice = () =>
     run(async () => {
       const imported = [];
-      for (const asset of await pickDocuments({ kinds: ['pdf', 'docx'], multiple: true })) {
+      for (const asset of await pickDocuments({ kinds: ALL_KINDS, multiple: true })) {
         imported.push(await importDocument(asset.uri, asset.name, asset.kind));
       }
       if (imported.length === 1) openDocument(imported[0]);
     });
 
-  const createBlank = () =>
-    run(async () => openDocument(await createDocument('Untitled', await createBlankPdf())));
+  const createNew = (kind: DocumentKind) =>
+    run(async () => openDocument(await createBlankDocument(kind)));
 
-  const openDocument = (doc: PdfDocument) =>
-    router.push({
-      pathname: doc.kind === 'docx' ? '/word/[id]' : '/editor/[id]',
-      params: { id: doc.id },
-    });
+  /** The "New" button: import from the device or start a blank document. */
+  const showNewMenu = () =>
+    showActionSheet('New', [
+      { label: 'Import from device', onPress: importFromDevice },
+      { label: 'New PDF', onPress: () => createNew('pdf') },
+      { label: 'New Word document', onPress: () => createNew('docx') },
+      { label: 'New Excel workbook', onPress: () => createNew('xlsx') },
+      { label: 'New PowerPoint presentation', onPress: () => createNew('pptx') },
+    ]);
+
+  const openDocument = (doc: PdfDocument) => router.push(editorRouteFor(doc));
 
   const confirmDelete = (doc: PdfDocument) =>
     Alert.alert('Delete document?', `"${doc.name}" will be permanently removed.`, [
@@ -77,15 +91,6 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <Stack.Screen
-        options={{
-          headerRight: () => (
-            <Pressable onPress={createBlank} hitSlop={8} accessibilityLabel="New blank PDF">
-              <Ionicons name="document-outline" size={22} color={theme.text} />
-            </Pressable>
-          ),
-        }}
-      />
       <FlatList
         data={documents}
         keyExtractor={(item) => item.id}
@@ -99,8 +104,7 @@ export default function HomeScreen() {
             <Image source={require('@/assets/images/logo.png')} style={styles.logo} />
             <Text style={[styles.emptyTitle, { color: theme.text }]}>No documents yet</Text>
             <Text style={[styles.emptyBody, { color: theme.textSecondary }]}>
-              Import a PDF to annotate, sign, and rearrange its pages, or a Word document to edit
-              and turn into a PDF.
+              Import PDF, Word, Excel and PowerPoint files to view, edit and convert them.
             </Text>
           </View>
         }
@@ -112,12 +116,8 @@ export default function HomeScreen() {
               styles.row,
               { backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement },
             ]}>
-            <View
-              style={[
-                styles.fileIcon,
-                { backgroundColor: item.kind === 'docx' ? WORD_BLUE : theme.tint },
-              ]}>
-              <Text style={styles.fileIconText}>{item.kind === 'docx' ? 'DOC' : 'PDF'}</Text>
+            <View style={[styles.fileIcon, { backgroundColor: FILE_BADGES[item.kind].color }]}>
+              <Text style={styles.fileIconText}>{FILE_BADGES[item.kind].label}</Text>
             </View>
             <View style={styles.rowText}>
               <Text numberOfLines={1} style={[styles.rowTitle, { color: theme.text }]}>
@@ -141,7 +141,7 @@ export default function HomeScreen() {
       />
 
       <Pressable
-        onPress={pickPdf}
+        onPress={showNewMenu}
         style={({ pressed }) => [
           styles.fab,
           {
@@ -151,7 +151,7 @@ export default function HomeScreen() {
           },
         ]}>
         <Ionicons name="add" size={22} color={theme.tintText} />
-        <Text style={[styles.fabText, { color: theme.tintText }]}>Import</Text>
+        <Text style={[styles.fabText, { color: theme.tintText }]}>New</Text>
       </Pressable>
 
       <TextPromptModal

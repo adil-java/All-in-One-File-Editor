@@ -41,6 +41,8 @@
     "docx": "^9.0.2",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~57.0.2",
+    "exceljs": "^4.4.0",
+    "jszip": "^3.10.2",
     "mammoth": "^1.8.0",
     "pdfjs-dist": "^3.11.174",
     "typescript": "~6.0.3"

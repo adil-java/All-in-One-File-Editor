@@ -1,6 +1,6 @@
 /**
- * Local document library. Every document is a plain .pdf or .docx file inside
- * `<documents>/pdfs`; the file name doubles as the document id.
+ * Local document library. Every document is a plain .pdf, .docx, .xlsx or
+ * .pptx file inside `<documents>/pdfs`; the file name doubles as the document id.
  */
 
 import * as DocumentPicker from 'expo-document-picker';
@@ -8,7 +8,12 @@ import { Directory, File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 
-export type DocumentKind = 'pdf' | 'docx';
+import { BLANK_DOCX, BLANK_PPTX, BLANK_XLSX } from './office/templates';
+import { createBlankPdf } from './pdf/pages';
+
+export type DocumentKind = 'pdf' | 'docx' | 'xlsx' | 'pptx';
+
+export const ALL_KINDS: DocumentKind[] = ['pdf', 'docx', 'xlsx', 'pptx'];
 
 export type PdfDocument = {
   id: string;
@@ -22,14 +27,18 @@ export type PdfDocument = {
 const MIME_TYPES: Record<DocumentKind, string> = {
   pdf: 'application/pdf',
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
 };
 
 const SHARE_UTIS: Record<DocumentKind, string> = {
   pdf: 'com.adobe.pdf',
   docx: 'org.openxmlformats.wordprocessingml.document',
+  xlsx: 'org.openxmlformats.spreadsheetml.sheet',
+  pptx: 'org.openxmlformats.presentationml.presentation',
 };
 
-const EXTENSION = /\.(pdf|docx)$/i;
+const EXTENSION = /\.(pdf|docx|xlsx|pptx)$/i;
 
 function kindOf(fileName: string): DocumentKind | null {
   const match = EXTENSION.exec(fileName);
@@ -186,6 +195,78 @@ export async function shareBytes(name: string, bytes: Uint8Array, kind: Document
   file.create({ overwrite: true });
   await file.write(bytes);
   await shareDocument(toDocument(file));
+}
+
+const BLANK_NAMES: Record<DocumentKind, string> = {
+  pdf: 'Untitled PDF',
+  docx: 'Untitled document',
+  xlsx: 'Untitled workbook',
+  pptx: 'Untitled presentation',
+};
+
+/** Creates an empty document of the given kind in the library. */
+export async function createBlankDocument(kind: DocumentKind): Promise<PdfDocument> {
+  const bytes =
+    kind === 'pdf'
+      ? await createBlankPdf()
+      : base64ToBytes({ docx: BLANK_DOCX, xlsx: BLANK_XLSX, pptx: BLANK_PPTX }[kind]);
+  return createDocument(BLANK_NAMES[kind], bytes, kind);
+}
+
+/** Route of the editor for a document. */
+export function editorRouteFor(doc: PdfDocument) {
+  const pathname = {
+    pdf: '/editor/[id]',
+    docx: '/word/[id]',
+    xlsx: '/excel/[id]',
+    pptx: '/powerpoint/[id]',
+  }[doc.kind] as '/editor/[id]';
+  return { pathname, params: { id: doc.id } };
+}
+
+function containsAscii(bytes: Uint8Array, text: string) {
+  const first = text.charCodeAt(0);
+  outer: for (let i = 0; i <= bytes.length - text.length; i++) {
+    if (bytes[i] !== first) continue;
+    for (let j = 1; j < text.length; j++) if (bytes[i + j] !== text.charCodeAt(j)) continue outer;
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Works out a file's kind from its name, or else its contents: PDFs start with
+ * "%PDF", and Office files are zips whose entry names (stored as plain text)
+ * reveal the type. Files shared from other apps often have meaningless names.
+ */
+export function detectKind(name: string, bytes: Uint8Array): DocumentKind | null {
+  const fromName = kindOf(name);
+  if (fromName) return fromName;
+  if (bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46)
+    return 'pdf';
+  if (bytes[0] === 0x50 && bytes[1] === 0x4b) {
+    if (containsAscii(bytes, 'word/document.xml')) return 'docx';
+    if (containsAscii(bytes, 'xl/workbook.xml')) return 'xlsx';
+    if (containsAscii(bytes, 'ppt/presentation.xml')) return 'pptx';
+  }
+  return null;
+}
+
+/** Imports a file another app opened with this one (e.g. "Open with" from WhatsApp). */
+export async function importSharedFile(uri: string): Promise<PdfDocument> {
+  const file = new File(uri);
+  const bytes = await file.bytes();
+  let name = '';
+  try {
+    name = decodeURIComponent(file.name);
+  } catch {
+    name = file.name;
+  }
+  const kind = detectKind(name, bytes);
+  if (!kind)
+    throw new Error('This file type is not supported. Open a PDF, Word, Excel or PowerPoint file.');
+  const base = name.replace(EXTENSION, '').replace(/^\d+$/, '') || 'Shared document';
+  return createDocument(base, bytes, kind);
 }
 
 /** Decodes base64 (e.g. from a WebView) into bytes. */
