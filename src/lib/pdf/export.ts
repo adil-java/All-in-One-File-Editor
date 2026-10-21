@@ -5,20 +5,33 @@
  */
 
 import {
+  beginText,
   BlendMode,
   degrees,
+  endText,
   LineCapStyle,
   PDFDocument,
   type PDFFont,
+  PDFHexString,
   type PDFImage,
+  type PDFName,
+  type PDFOperator,
   type PDFPage,
+  popGraphicsState,
+  pushGraphicsState,
   rgb,
+  setFillingRgbColor,
+  setFontAndSize,
+  setTextMatrix,
+  showText,
   StandardFonts,
 } from 'pdf-lib';
 
 import { BASELINE, LINE_HEIGHT, textLines } from '@/lib/editor/geometry';
 import { arrowHead, denormalize, inkPath } from '@/lib/editor/paths';
-import type { Annotation, EditorPage, Point, TextFont } from '@/lib/editor/types';
+import type { Annotation, EditorPage, Point, TextAnnotation, TextFont } from '@/lib/editor/types';
+
+import { findPageFont, type PageFont } from './page-fonts';
 
 /** Standard PDF fonts by family, indexed by [bold][italic]. */
 const STANDARD_FONTS: Record<
@@ -124,7 +137,75 @@ type Resources = {
   doc: PDFDocument;
   fonts: Map<StandardFonts, PDFFont>;
   images: Map<string, PDFImage>;
+  /** Resource names of embedded standard fonts, per page. */
+  fontKeys: WeakMap<PDFPage, Map<PDFFont, PDFName>>;
 };
+
+function fontKey(page: PDFPage, font: PDFFont, resources: Resources) {
+  let keys = resources.fontKeys.get(page);
+  if (!keys) resources.fontKeys.set(page, (keys = new Map()));
+  let key = keys.get(font);
+  if (!key) keys.set(font, (key = page.node.newFontDictionary(font.name, font.ref)));
+  return key;
+}
+
+/**
+ * Draws text with a font that is already in the page (the font of the text it
+ * replaces), so it looks exactly like the original. Characters the embedded
+ * font can't encode (e.g. missing from a subset) use `fallback` instead; the
+ * viewer advances by each font's real glyph widths, so runs line up.
+ */
+function drawTextInPageFont(
+  page: PDFPage,
+  a: TextAnnotation,
+  source: PageFont,
+  fallback: PDFFont,
+  map: (p: Point) => Point,
+  rotation: number,
+  resources: Resources,
+) {
+  const supported = new Set(fallback.getCharacterSet());
+  const fallbackKey = fontKey(page, fallback, resources);
+  const radians = (rotation * Math.PI) / 180;
+  const [cos, sin] = [Math.cos(radians), Math.sin(radians)];
+  const { red, green, blue } = color(a.color) as { red: number; green: number; blue: number };
+
+  const ops: PDFOperator[] = [
+    pushGraphicsState(),
+    beginText(),
+    setFillingRgbColor(red, green, blue),
+  ];
+  textLines(a.text).forEach((line, i) => {
+    const origin = map({ x: a.x, y: a.y + a.fontSize * (BASELINE + i * LINE_HEIGHT) });
+    ops.push(setTextMatrix(cos, sin, -sin, cos, origin.x, origin.y));
+    // Split the line into runs that use the same font.
+    let run = '';
+    let runInSource = true;
+    const flush = () => {
+      if (!run) return;
+      ops.push(
+        runInSource
+          ? setFontAndSize(source.key, a.fontSize)
+          : setFontAndSize(fallbackKey, a.fontSize),
+        showText(
+          runInSource
+            ? PDFHexString.of(Array.from(run, (ch) => source.codes.get(ch)).join(''))
+            : fallback.encodeText(run),
+        ),
+      );
+      run = '';
+    };
+    for (const ch of Array.from(line)) {
+      const inSource = source.codes.has(ch);
+      if (inSource !== runInSource) flush();
+      runInSource = inSource;
+      run += inSource || supported.has(ch.codePointAt(0)!) ? ch : '?';
+    }
+    flush();
+  });
+  ops.push(endText(), popGraphicsState());
+  page.pushOperators(...ops);
+}
 
 async function embedImage(uri: string, resources: Resources) {
   let image = resources.images.get(uri);
@@ -228,6 +309,11 @@ async function drawAnnotation(page: PDFPage, a: Annotation, resources: Resources
       break;
     case 'text': {
       const font = await embedFont(a, resources);
+      const source = findPageFont(page, a.sourceFont);
+      if (source) {
+        drawTextInPageFont(page, a, source, font, map, rotation, resources);
+        break;
+      }
       textLines(a.text).forEach((line, i) => {
         const origin = map({ x: a.x, y: a.y + a.fontSize * (BASELINE + i * LINE_HEIGHT) });
         page.drawText(encodable(line, font), {
@@ -300,7 +386,12 @@ export async function exportPdf(sourceBase64: string, pages: EditorPage[]): Prom
   finalPages.forEach((page) => doc.addPage(page));
   removeOrphanedFields(doc, finalPages);
 
-  const resources: Resources = { doc, fonts: new Map(), images: new Map() };
+  const resources: Resources = {
+    doc,
+    fonts: new Map(),
+    images: new Map(),
+    fontKeys: new WeakMap(),
+  };
   for (let i = 0; i < pages.length; i++) {
     const page = finalPages[i];
     for (const annotation of pages[i].annotations) {

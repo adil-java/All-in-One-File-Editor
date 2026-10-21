@@ -61,6 +61,7 @@ export function replaceTextAnnotations(item: PdfTextItem, text: string): Annotat
       font: fontFor(item),
       bold: item.bold,
       italic: item.italic,
+      sourceFont: item.fontName || undefined,
     },
   ];
 }

@@ -161,8 +161,9 @@ const BRIDGE = `
             fontSize: fontSize,
             fontFamily: style.fontFamily || 'sans-serif',
             fontName: font.name || '',
-            bold: !!(font.bold || font.black),
-            italic: !!font.italic,
+            // pdf.js doesn't always flag subset fonts, so also check the name.
+            bold: !!(font.bold || font.black || /bold|black|heavy|semibold|demi/i.test(font.name || '')),
+            italic: !!(font.italic || /italic|oblique/i.test(font.name || '')),
             color: colors.color,
             background: colors.background,
           });

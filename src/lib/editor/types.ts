@@ -56,6 +56,11 @@ export type TextAnnotation = Base & {
   font?: TextFont;
   bold?: boolean;
   italic?: boolean;
+  /**
+   * Name of a font already in the PDF page (the font of text this replaces).
+   * When the page has it, the text is saved in exactly that font.
+   */
+  sourceFont?: string;
 };
 
 export type ImageAnnotation = Base &
