@@ -228,10 +228,15 @@ export default function EditorScreen() {
 
   const showMore = () =>
     showActionSheet(doc?.name ?? 'Document', [
-      { label: 'Manage pages', onPress: () => setManagingPages(true) },
-      { label: 'Save as copy', onPress: saveCopy },
-      { label: 'Share', onPress: share },
-      { label: 'Delete document', onPress: confirmDelete, destructive: true },
+      { label: 'Manage pages', icon: 'albums-outline', onPress: () => setManagingPages(true) },
+      { label: 'Save as copy', icon: 'copy-outline', onPress: saveCopy },
+      { label: 'Share', icon: 'share-outline', onPress: share },
+      {
+        label: 'Delete document',
+        icon: 'trash-outline',
+        onPress: confirmDelete,
+        destructive: true,
+      },
     ]);
 
   const confirmDelete = () => {

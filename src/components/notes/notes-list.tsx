@@ -45,13 +45,15 @@ export function NotesList() {
   /** Long-press menu on a note card. */
   const showActions = (note: Note) =>
     showActionSheet(note.title.trim() || 'Note', [
-      { label: 'Share', onPress: () => share(note) },
+      { label: 'Share', icon: 'share-outline', onPress: () => share(note) },
       {
         label: note.pinned ? 'Unpin' : 'Pin to top',
+        icon: note.pinned ? 'pin' : 'pin-outline',
         onPress: () => updateNote(note.id, { pinned: !note.pinned }),
       },
       {
         label: 'Delete',
+        icon: 'trash-outline',
         destructive: true,
         onPress: () =>
           confirm({

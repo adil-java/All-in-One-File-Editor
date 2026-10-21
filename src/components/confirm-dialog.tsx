@@ -1,14 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, {
-  interpolate,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming,
-} from 'react-native-reanimated';
-import { scheduleOnRN } from 'react-native-worklets';
 
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -60,38 +52,24 @@ export function ConfirmHost() {
 
 function ConfirmDialog({ options, onClosed }: { options: ConfirmOptions; onClosed: () => void }) {
   const theme = useTheme();
-  const progress = useSharedValue(0);
   const tone = TONES[options.tone ?? 'info'];
 
-  useEffect(() => {
-    progress.set(withSpring(1, { damping: 18, stiffness: 260 }));
-  }, [progress]);
-
-  /** Animates out, then runs the button's action. */
+  /** Closes the dialog at once, then runs the button's action. */
   const close = (button?: ConfirmButton) => {
-    progress.set(
-      withTiming(0, { duration: 160 }, (finished) => {
-        if (finished) scheduleOnRN(onClosed);
-      }),
-    );
+    onClosed();
     button?.onPress?.();
   };
 
   const cancelButton = options.buttons.find((b) => b.style === 'cancel');
 
-  const backdrop = useAnimatedStyle(() => ({ opacity: Math.min(progress.get(), 1) }));
-  const card = useAnimatedStyle(() => ({
-    opacity: Math.min(progress.get(), 1),
-    transform: [{ scale: interpolate(progress.get(), [0, 1], [0.88, 1]) }],
-  }));
-
   return (
     <Modal transparent visible animationType="none" onRequestClose={() => close(cancelButton)}>
-      <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, backdrop]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={() => close(cancelButton)} />
-      </Animated.View>
+      <Pressable
+        style={[StyleSheet.absoluteFill, styles.backdrop]}
+        onPress={() => close(cancelButton)}
+      />
       <View style={styles.center} pointerEvents="box-none">
-        <Animated.View style={[styles.card, card, { backgroundColor: theme.backgroundElement }]}>
+        <View style={[styles.card, { backgroundColor: theme.backgroundElement }]}>
           <View style={[styles.iconWrap, { backgroundColor: tone.color + '1F' }]}>
             <Ionicons name={tone.icon} size={28} color={tone.color} />
           </View>
@@ -122,7 +100,7 @@ function ConfirmDialog({ options, onClosed }: { options: ConfirmOptions; onClose
               );
             })}
           </View>
-        </Animated.View>
+        </View>
       </View>
     </Modal>
   );

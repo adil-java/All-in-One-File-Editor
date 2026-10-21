@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import { ActionSheetHost } from '@/components/action-sheet';
 import { ConfirmHost } from '@/components/confirm-dialog';
 import { ToastHost } from '@/components/toast';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -40,6 +41,7 @@ export default function RootLayout() {
         <StatusBar style="auto" />
         <ToastHost />
         <ConfirmHost />
+        <ActionSheetHost />
       </ThemeProvider>
     </GestureHandlerRootView>
   );

@@ -81,10 +81,19 @@ export default function HomeScreen() {
 
   const showActions = (doc: PdfDocument) =>
     showActionSheet(doc.name, [
-      { label: 'Rename', onPress: () => setRenaming(doc) },
-      { label: 'Duplicate', onPress: () => run(() => duplicateDocument(doc.id)) },
-      { label: 'Share', onPress: () => run(() => shareDocument(doc)) },
-      { label: 'Delete', onPress: () => confirmDelete(doc), destructive: true },
+      { label: 'Rename', icon: 'create-outline', onPress: () => setRenaming(doc) },
+      {
+        label: 'Duplicate',
+        icon: 'copy-outline',
+        onPress: () => run(() => duplicateDocument(doc.id)),
+      },
+      { label: 'Share', icon: 'share-outline', onPress: () => run(() => shareDocument(doc)) },
+      {
+        label: 'Delete',
+        icon: 'trash-outline',
+        onPress: () => confirmDelete(doc),
+        destructive: true,
+      },
     ]);
 
   return (
@@ -128,12 +137,6 @@ export default function HomeScreen() {
                 {formatSize(item.size)} · {formatDate(item.modifiedAt)}
               </Text>
             </View>
-            <Pressable
-              hitSlop={8}
-              onPress={() => confirmDelete(item)}
-              accessibilityLabel={`Delete ${item.name}`}>
-              <Ionicons name="trash-outline" size={20} color={theme.danger} />
-            </Pressable>
             <Pressable hitSlop={8} onPress={() => showActions(item)}>
               <Ionicons name="ellipsis-horizontal" size={20} color={theme.textSecondary} />
             </Pressable>

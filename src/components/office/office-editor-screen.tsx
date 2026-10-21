@@ -191,8 +191,8 @@ export function OfficeEditorScreen({ id, config }: { id: string; config: OfficeE
 
   const showMore = () =>
     showActionSheet(doc?.name ?? 'Document', [
-      { label: 'Save as PDF', onPress: saveAsPdf },
-      { label: 'Share', onPress: share },
+      { label: 'Save as PDF', icon: 'document-text-outline', onPress: saveAsPdf },
+      { label: 'Share', icon: 'share-outline', onPress: share },
     ]);
 
   // Ask before leaving with unsaved edits. Re-dispatched actions pass through
