@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, Stack, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { TextPromptModal } from '@/components/text-prompt-modal';
@@ -96,7 +96,7 @@ export default function HomeScreen() {
         ]}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Ionicons name="document-text-outline" size={64} color={theme.textSecondary} />
+            <Image source={require('@/assets/images/logo.png')} style={styles.logo} />
             <Text style={[styles.emptyTitle, { color: theme.text }]}>No documents yet</Text>
             <Text style={[styles.emptyBody, { color: theme.textSecondary }]}>
               Import a PDF to annotate, sign, and rearrange its pages, or a Word document to edit
@@ -173,6 +173,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   list: { padding: Spacing.three, gap: Spacing.two },
   emptyList: { flexGrow: 1, justifyContent: 'center' },
+  logo: { width: 96, height: 96, marginBottom: Spacing.one },
   empty: { alignItems: 'center', gap: Spacing.two, paddingHorizontal: Spacing.five },
   emptyTitle: { fontSize: 18, fontWeight: '600', marginTop: Spacing.two },
   emptyBody: { fontSize: 15, textAlign: 'center' },
