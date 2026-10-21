@@ -16,12 +16,14 @@ import {
   formatSize,
   importDocument,
   listDocuments,
-  pickPdfs,
+  pickDocuments,
   type PdfDocument,
   renameDocument,
   shareDocument,
 } from '@/lib/documents';
 import { createBlankPdf } from '@/lib/pdf/pages';
+
+const WORD_BLUE = '#2B579A';
 
 export default function HomeScreen() {
   const theme = useTheme();
@@ -44,8 +46,8 @@ export default function HomeScreen() {
   const pickPdf = () =>
     run(async () => {
       const imported = [];
-      for (const asset of await pickPdfs({ multiple: true })) {
-        imported.push(await importDocument(asset.uri, asset.name));
+      for (const asset of await pickDocuments({ kinds: ['pdf', 'docx'], multiple: true })) {
+        imported.push(await importDocument(asset.uri, asset.name, asset.kind));
       }
       if (imported.length === 1) openDocument(imported[0]);
     });
@@ -54,7 +56,10 @@ export default function HomeScreen() {
     run(async () => openDocument(await createDocument('Untitled', await createBlankPdf())));
 
   const openDocument = (doc: PdfDocument) =>
-    router.push({ pathname: '/editor/[id]', params: { id: doc.id } });
+    router.push({
+      pathname: doc.kind === 'docx' ? '/word/[id]' : '/editor/[id]',
+      params: { id: doc.id },
+    });
 
   const confirmDelete = (doc: PdfDocument) =>
     Alert.alert('Delete document?', `"${doc.name}" will be permanently removed.`, [
@@ -94,7 +99,8 @@ export default function HomeScreen() {
             <Ionicons name="document-text-outline" size={64} color={theme.textSecondary} />
             <Text style={[styles.emptyTitle, { color: theme.text }]}>No documents yet</Text>
             <Text style={[styles.emptyBody, { color: theme.textSecondary }]}>
-              Import a PDF to annotate, sign, and rearrange its pages.
+              Import a PDF to annotate, sign, and rearrange its pages, or a Word document to edit
+              and turn into a PDF.
             </Text>
           </View>
         }
@@ -106,8 +112,12 @@ export default function HomeScreen() {
               styles.row,
               { backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement },
             ]}>
-            <View style={[styles.fileIcon, { backgroundColor: theme.tint }]}>
-              <Text style={styles.fileIconText}>PDF</Text>
+            <View
+              style={[
+                styles.fileIcon,
+                { backgroundColor: item.kind === 'docx' ? WORD_BLUE : theme.tint },
+              ]}>
+              <Text style={styles.fileIconText}>{item.kind === 'docx' ? 'DOC' : 'PDF'}</Text>
             </View>
             <View style={styles.rowText}>
               <Text numberOfLines={1} style={[styles.rowTitle, { color: theme.text }]}>
@@ -141,7 +151,7 @@ export default function HomeScreen() {
           },
         ]}>
         <Ionicons name="add" size={22} color={theme.tintText} />
-        <Text style={[styles.fabText, { color: theme.tintText }]}>Import PDF</Text>
+        <Text style={[styles.fabText, { color: theme.tintText }]}>Import</Text>
       </Pressable>
 
       <TextPromptModal

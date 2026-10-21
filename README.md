@@ -6,13 +6,16 @@ device with no server and no network connection.
 
 ## Features
 
-- **Library**: import PDFs from Files, create blank documents, and rename, duplicate,
-  share or delete them.
+- **Library**: import PDFs and Word documents (.docx) from Files, create blank PDFs, and
+  rename, duplicate, share or delete documents.
+- **Word documents**: edit text with bold, italic, underline, headings, lists and alignment,
+  then save as .docx or as a PDF (which opens in the PDF editor).
 - **Annotate**: pen, highlighter, text, box, circle, line, arrow and whiteout tools,
   plus an eraser. Each tool has its own color and size settings.
 - **Edit the PDF's own text**: with the Edit text tool, tap highlighted text to change it.
-  The original is covered and the new text is drawn at the same position and size, in the
-  closest standard font.
+  The new text keeps the original's position, size, color, bold and italic, in the closest
+  standard font, over a cover box in the page's own background color. Fillable form fields
+  can be tapped the same way, and their values use the field's own font.
 - **Fill forms**: fill in text boxes, checkboxes, dropdowns and radio buttons in fillable PDFs.
   They stay fillable after saving, or you can lock them in place.
 - **Zoom**: pinch or use the zoom buttons (50%–300%). Pages re-render sharply at each
@@ -30,7 +33,7 @@ device with no server and no network connection.
 ## Getting started
 
 ```bash
-npm install        # also runs scripts/bundle-pdfjs.js (see below)
+npm install        # also runs scripts/bundle-web-libs.js (see below)
 npx expo start
 ```
 
@@ -69,10 +72,13 @@ src/
 ```
 
 - **Rendering.** [pdf.js](https://mozilla.github.io/pdf.js/) runs inside a hidden
-  `react-native-webview` and rasterizes pages to JPEG on demand. The pdf.js library is
-  inlined into `src/lib/pdf-renderer/pdfjs-source.generated.ts` by
-  `scripts/bundle-pdfjs.js` on `npm install`. This file is git-ignored, so rendering
-  works offline. If the file is missing, run `node scripts/bundle-pdfjs.js`.
+  `react-native-webview` and rasterizes pages to JPEG on demand.
+- **Word documents.** [mammoth](https://github.com/mwilliamson/mammoth.js) converts .docx
+  to HTML inside a WebView, where it is edited. [docx](https://docx.js.org) rebuilds a .docx
+  from the edited HTML, and `expo-print` turns it into a PDF.
+- **Offline libraries.** pdf.js, mammoth and docx are inlined into git-ignored
+  `*.generated.ts` modules by `scripts/bundle-web-libs.js` on `npm install`, so nothing is
+  loaded from the network. If the files are missing, run `node scripts/bundle-web-libs.js`.
 - **Editing model.** The editor never changes the original PDF while you work. Each
   editor page refers to a source page by index, and holds an extra rotation and a list
   of vector annotations. Annotation coordinates are in PDF points, in the page's base
@@ -94,3 +100,6 @@ src/
   single words. The cover box is white, and scanned PDFs have no text to edit.
 - Form edits aren't part of undo/redo.
 - Password-protected PDFs aren't supported.
+- Word support keeps content and basic formatting (headings, bold/italic/underline, lists,
+  tables, images, alignment), not exact Word layout: custom fonts, colors, text boxes,
+  headers and footers are lost. Old .doc files aren't supported.

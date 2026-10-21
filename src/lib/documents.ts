@@ -1,5 +1,5 @@
 /**
- * Local PDF library. Every document is a plain .pdf file inside
+ * Local document library. Every document is a plain .pdf or .docx file inside
  * `<documents>/pdfs`; the file name doubles as the document id.
  */
 
@@ -8,13 +8,33 @@ import { Directory, File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 
+export type DocumentKind = 'pdf' | 'docx';
+
 export type PdfDocument = {
   id: string;
+  kind: DocumentKind;
   name: string;
   uri: string;
   size: number;
   modifiedAt: number;
 };
+
+const MIME_TYPES: Record<DocumentKind, string> = {
+  pdf: 'application/pdf',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+};
+
+const SHARE_UTIS: Record<DocumentKind, string> = {
+  pdf: 'com.adobe.pdf',
+  docx: 'org.openxmlformats.wordprocessingml.document',
+};
+
+const EXTENSION = /\.(pdf|docx)$/i;
+
+function kindOf(fileName: string): DocumentKind | null {
+  const match = EXTENSION.exec(fileName);
+  return match ? (match[1].toLowerCase() as DocumentKind) : null;
+}
 
 function libraryDir() {
   const dir = new Directory(Paths.document, 'pdfs');
@@ -25,7 +45,8 @@ function libraryDir() {
 function toDocument(file: File): PdfDocument {
   return {
     id: file.name,
-    name: file.name.replace(/\.pdf$/i, ''),
+    kind: kindOf(file.name) ?? 'pdf',
+    name: file.name.replace(EXTENSION, ''),
     uri: file.uri,
     size: file.size,
     modifiedAt: file.modificationTime ?? 0,
@@ -34,19 +55,19 @@ function toDocument(file: File): PdfDocument {
 
 function sanitizeName(name: string) {
   const cleaned = name
-    .replace(/\.pdf$/i, '')
+    .replace(EXTENSION, '')
     .replace(/[\\/:*?"<>|]+/g, '-')
     .trim();
   return cleaned || 'Untitled';
 }
 
-/** Returns a file in the library named `name.pdf`, suffixed with a counter if taken. */
-function uniqueFile(name: string) {
+/** Returns a file in the library named `name.<kind>`, suffixed with a counter if taken. */
+function uniqueFile(name: string, kind: DocumentKind) {
   const dir = libraryDir();
   const base = sanitizeName(name);
-  let candidate = new File(dir, `${base}.pdf`);
+  let candidate = new File(dir, `${base}.${kind}`);
   for (let i = 2; candidate.exists; i++) {
-    candidate = new File(dir, `${base} (${i}).pdf`);
+    candidate = new File(dir, `${base} (${i}).${kind}`);
   }
   return candidate;
 }
@@ -54,7 +75,7 @@ function uniqueFile(name: string) {
 export function listDocuments(): PdfDocument[] {
   return libraryDir()
     .list()
-    .filter((item): item is File => item instanceof File && /\.pdf$/i.test(item.name))
+    .filter((item): item is File => item instanceof File && kindOf(item.name) !== null)
     .map(toDocument)
     .sort((a, b) => b.modifiedAt - a.modifiedAt);
 }
@@ -65,29 +86,50 @@ export function getDocument(id: string): PdfDocument | null {
 }
 
 /**
- * Lets the user pick PDFs from the system file picker. Returns an empty list if canceled.
+ * Lets the user pick documents of the given kinds from the system file picker.
+ * Returns an empty list if canceled.
  *
  * On Android the picker's cache copy lives outside the directories Expo Go lets
  * expo-file-system read ("Missing 'READ' permission"), so the original content://
  * URI is used instead; content URIs are readable through `File`.
  */
-export async function pickPdfs({ multiple = false } = {}) {
+export async function pickDocuments({ kinds = ['pdf'] as DocumentKind[], multiple = false } = {}) {
   const result = await DocumentPicker.getDocumentAsync({
-    type: 'application/pdf',
+    type: kinds.map((kind) => MIME_TYPES[kind]),
     copyToCacheDirectory: Platform.OS !== 'android',
     multiple,
   });
-  return result.canceled ? [] : result.assets.map(({ uri, name }) => ({ uri, name }));
+  if (result.canceled) return [];
+  return result.assets.map(({ uri, name, mimeType }) => ({
+    uri,
+    name,
+    kind:
+      kindOf(name) ??
+      (Object.keys(MIME_TYPES) as DocumentKind[]).find((k) => MIME_TYPES[k] === mimeType) ??
+      kinds[0],
+  }));
+}
+
+export function pickPdfs({ multiple = false } = {}) {
+  return pickDocuments({ kinds: ['pdf'], multiple });
 }
 
 /** Copies a picked file into the library. */
-export async function importDocument(sourceUri: string, name: string): Promise<PdfDocument> {
+export async function importDocument(
+  sourceUri: string,
+  name: string,
+  kind: DocumentKind = 'pdf',
+): Promise<PdfDocument> {
   // Read and write rather than File.copy, which cannot copy from content:// URIs.
-  return createDocument(name, await new File(sourceUri).bytes());
+  return createDocument(name, await new File(sourceUri).bytes(), kind);
 }
 
-export async function createDocument(name: string, bytes: Uint8Array): Promise<PdfDocument> {
-  const target = uniqueFile(name);
+export async function createDocument(
+  name: string,
+  bytes: Uint8Array,
+  kind: DocumentKind = 'pdf',
+): Promise<PdfDocument> {
+  const target = uniqueFile(name, kind);
   target.create();
   await target.write(bytes);
   return toDocument(target);
@@ -109,15 +151,15 @@ export async function readDocumentBytes(id: string): Promise<Uint8Array> {
 
 export async function renameDocument(id: string, newName: string): Promise<PdfDocument> {
   const file = new File(libraryDir(), id);
-  if (sanitizeName(newName) === file.name.replace(/\.pdf$/i, '')) return toDocument(file);
-  const target = uniqueFile(newName);
+  if (sanitizeName(newName) === file.name.replace(EXTENSION, '')) return toDocument(file);
+  const target = uniqueFile(newName, kindOf(file.name) ?? 'pdf');
   await file.move(target);
   return toDocument(file);
 }
 
 export async function duplicateDocument(id: string): Promise<PdfDocument> {
   const file = new File(libraryDir(), id);
-  const target = uniqueFile(`${file.name.replace(/\.pdf$/i, '')} copy`);
+  const target = uniqueFile(`${file.name.replace(EXTENSION, '')} copy`, kindOf(file.name) ?? 'pdf');
   await file.copy(target);
   return toDocument(target);
 }
@@ -132,18 +174,26 @@ export async function shareDocument(doc: PdfDocument) {
     throw new Error('Sharing is not available on this device');
   }
   await Sharing.shareAsync(doc.uri, {
-    mimeType: 'application/pdf',
-    UTI: 'com.adobe.pdf',
+    mimeType: MIME_TYPES[doc.kind],
+    UTI: SHARE_UTIS[doc.kind],
     dialogTitle: doc.name,
   });
 }
 
 /** Shares bytes that are not (yet) in the library, via a temporary file. */
-export async function shareBytes(name: string, bytes: Uint8Array) {
-  const file = new File(Paths.cache, `${sanitizeName(name)}.pdf`);
+export async function shareBytes(name: string, bytes: Uint8Array, kind: DocumentKind = 'pdf') {
+  const file = new File(Paths.cache, `${sanitizeName(name)}.${kind}`);
   file.create({ overwrite: true });
   await file.write(bytes);
   await shareDocument(toDocument(file));
+}
+
+/** Decodes base64 (e.g. from a WebView) into bytes. */
+export function base64ToBytes(base64: string) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
 }
 
 export function formatSize(bytes: number) {
