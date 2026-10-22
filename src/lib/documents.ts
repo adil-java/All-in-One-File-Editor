@@ -7,7 +7,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Directory, File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import JSZip from 'jszip';
-import { Platform } from 'react-native';
+import { Platform, TurboModuleRegistry } from 'react-native';
 
 import { BLANK_DOCX, BLANK_PPTX, BLANK_XLSX } from './office/templates';
 import { createBlankPdf } from './pdf/pages';
@@ -191,12 +191,44 @@ export async function shareDocument(doc: PdfDocument) {
 }
 
 /**
- * Shares several documents at once. The share sheet takes a single file, so
- * more than one document is bundled into a zip ("Documents (3).zip").
+ * Whether react-native-share's native module is in this build. It is in EAS
+ * builds but not in Expo Go, where importing the library would throw.
+ */
+function hasNativeMultiShare() {
+  return TurboModuleRegistry.get('RNShare') != null;
+}
+
+/**
+ * Shares several documents at once as separate files (EAS builds), or bundled
+ * into one zip where only single-file sharing exists (Expo Go).
  */
 export async function shareDocuments(docs: PdfDocument[]) {
   if (docs.length === 0) return;
   if (docs.length === 1) return shareDocument(docs[0]);
+
+  if (hasNativeMultiShare()) {
+    // react-native-share can only read files from the cache directory on
+    // Android, so share copies placed there.
+    const dir = new Directory(Paths.cache, 'share');
+    if (dir.exists) dir.delete();
+    dir.create({ intermediates: true });
+    const urls: string[] = [];
+    for (const doc of docs) {
+      const copy = new File(dir, doc.id);
+      await new File(doc.uri).copy(copy);
+      urls.push(copy.uri);
+    }
+    const kinds = new Set(docs.map((d) => d.kind));
+    const { default: Share } = await import('react-native-share');
+    await Share.open({
+      urls,
+      type: kinds.size === 1 ? MIME_TYPES[docs[0].kind] : '*/*',
+      title: `${docs.length} documents`,
+      failOnCancel: false,
+    });
+    return;
+  }
+
   if (!(await Sharing.isAvailableAsync())) {
     throw new Error('Sharing is not available on this device');
   }
