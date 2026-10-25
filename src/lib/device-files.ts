@@ -5,7 +5,7 @@
  * READ_EXTERNAL_STORAGE runtime permission. iOS has no equivalent.
  */
 
-import Constants from 'expo-constants';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { Directory, File, Paths } from 'expo-file-system';
 import { ActivityAction, startActivityAsync } from 'expo-intent-launcher';
 import { PermissionsAndroid, Platform } from 'react-native';
@@ -28,6 +28,12 @@ export type DeviceFile = {
 };
 
 export const storageAccessSupported = Platform.OS === 'android';
+
+/**
+ * Expo Go's own manifest doesn't declare MANAGE_EXTERNAL_STORAGE, so Android
+ * greys out its "All files access" switch. Access works in an installed build.
+ */
+export const runningInExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
 /** Android 11 (API 30) moved broad file access to the "All files access" setting. */
 export const usesAllFilesAccess = Platform.OS === 'android' && Number(Platform.Version) >= 30;

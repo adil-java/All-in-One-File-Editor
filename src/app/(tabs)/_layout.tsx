@@ -6,6 +6,7 @@ import { useTheme } from '@/hooks/use-theme';
 import {
   hasStorageAccess,
   markStorageAccessAsked,
+  runningInExpoGo,
   storageAccessAsked,
   storageAccessSupported,
 } from '@/lib/device-files';
@@ -15,7 +16,7 @@ export default function TabsLayout() {
 
   // On first launch, ask for file access the way file manager apps do.
   useEffect(() => {
-    if (!storageAccessSupported || storageAccessAsked()) return;
+    if (!storageAccessSupported || runningInExpoGo || storageAccessAsked()) return;
     markStorageAccessAsked();
     hasStorageAccess().then((granted) => {
       if (!granted) router.push('/storage-access');

@@ -66,7 +66,10 @@ export default function MergeScreen() {
       loading.current.add(source.uri);
       pageCountOf(source.uri)
         .then((count) => setCounts((c) => ({ ...c, [source.uri]: count })))
-        .catch(() => setCounts((c) => ({ ...c, [source.uri]: 'error' })));
+        .catch((error) => {
+          setCounts((c) => ({ ...c, [source.uri]: 'error' }));
+          toast.error(`Could not read "${source.name}"`, errorText(error));
+        });
     }
   }, [parts]);
 

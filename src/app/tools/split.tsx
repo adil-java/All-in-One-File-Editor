@@ -74,7 +74,11 @@ export default function SplitScreen() {
     let cancelled = false;
     pageCountOf(source.uri)
       .then((pages) => !cancelled && setCount({ uri: source.uri, pages }))
-      .catch(() => !cancelled && setCount({ uri: source.uri, pages: 'error' }));
+      .catch((error) => {
+        if (cancelled) return;
+        setCount({ uri: source.uri, pages: 'error' });
+        toast.error(`Could not read "${source.name}"`, errorText(error));
+      });
     return () => {
       cancelled = true;
     };

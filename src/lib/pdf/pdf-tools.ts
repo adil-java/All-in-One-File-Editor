@@ -4,10 +4,9 @@
  * results into the library.
  */
 
-import { File } from 'expo-file-system';
 import type { PDFDocument } from 'pdf-lib';
 
-import { createDocument, type PdfDocument } from '@/lib/documents';
+import { createDocument, type PdfDocument, readFileBytes } from '@/lib/documents';
 
 import { loadPdf, mergeParts, splitByRanges } from './merge-split';
 import { formatRange, type PageRange } from './page-ranges';
@@ -21,7 +20,7 @@ const opened = new Map<string, Promise<PDFDocument>>();
 function openSource(uri: string) {
   let pdf = opened.get(uri);
   if (!pdf) {
-    pdf = new File(uri).bytes().then(loadPdf);
+    pdf = readFileBytes(uri).then(loadPdf);
     // Allow a retry after a failure (e.g. a damaged file).
     pdf.catch(() => opened.delete(uri));
     opened.set(uri, pdf);

@@ -4,7 +4,7 @@
  */
 
 import * as DocumentPicker from 'expo-document-picker';
-import { Directory, File, Paths } from 'expo-file-system';
+import { Directory, File, FileMode, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import JSZip from 'jszip';
 import { Platform, TurboModuleRegistry } from 'react-native';
@@ -61,6 +61,46 @@ function toDocument(file: File): PdfDocument {
     size: file.size,
     modifiedAt: file.modificationTime ?? 0,
   };
+}
+
+/**
+ * File.bytes() and File.write() pass the whole file through one Java byte array,
+ * which runs out of memory on Android for files of a couple of hundred MB. These
+ * move the bytes in 8 MB pieces instead.
+ */
+const CHUNK_BYTES = 8 * 1024 * 1024;
+
+export async function readFileBytes(uri: string): Promise<Uint8Array> {
+  const handle = new File(uri).open(FileMode.ReadOnly);
+  try {
+    const size = handle.size ?? 0;
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    while (offset < size) {
+      const chunk = handle.readBytes(Math.min(CHUNK_BYTES, size - offset));
+      if (chunk.length === 0) break;
+      bytes.set(chunk, offset);
+      offset += chunk.length;
+      // Keep the UI responsive between pieces.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    return offset === size ? bytes : bytes.subarray(0, offset);
+  } finally {
+    handle.close();
+  }
+}
+
+async function writeFileBytes(file: File, bytes: Uint8Array) {
+  if (!file.exists) file.create();
+  const handle = file.open(FileMode.Truncate);
+  try {
+    for (let offset = 0; offset < bytes.length; offset += CHUNK_BYTES) {
+      handle.writeBytes(bytes.subarray(offset, offset + CHUNK_BYTES));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  } finally {
+    handle.close();
+  }
 }
 
 function sanitizeName(name: string) {
@@ -147,14 +187,13 @@ export async function createDocument(
   kind: DocumentKind = 'pdf',
 ): Promise<PdfDocument> {
   const target = uniqueFile(name, kind);
-  target.create();
-  await target.write(bytes);
+  await writeFileBytes(target, bytes);
   return toDocument(target);
 }
 
 export async function overwriteDocument(id: string, bytes: Uint8Array): Promise<PdfDocument> {
   const file = new File(libraryDir(), id);
-  await file.write(bytes);
+  await writeFileBytes(file, bytes);
   return toDocument(file);
 }
 
@@ -163,7 +202,7 @@ export async function readDocumentBase64(id: string): Promise<string> {
 }
 
 export async function readDocumentBytes(id: string): Promise<Uint8Array> {
-  return new File(libraryDir(), id).bytes();
+  return readFileBytes(new File(libraryDir(), id).uri);
 }
 
 export async function renameDocument(id: string, newName: string): Promise<PdfDocument> {

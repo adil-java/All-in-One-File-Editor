@@ -4,7 +4,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { requestStorageAccess, usesAllFilesAccess } from '@/lib/device-files';
+import { requestStorageAccess, runningInExpoGo, usesAllFilesAccess } from '@/lib/device-files';
 
 const REASONS: { icon: keyof typeof Ionicons.glyphMap; text: string }[] = [
   {
@@ -55,17 +55,26 @@ export function StorageAccessPrompt({ onResult, onSkip }: Props) {
         ))}
       </View>
 
+      {runningInExpoGo && (
+        <View style={[styles.notice, { backgroundColor: theme.backgroundElement }]}>
+          <Ionicons name="information-circle" size={22} color={theme.tint} />
+          <Text style={[styles.noticeText, { color: theme.text }]}>
+            Expo Go can’t get file access, so Android greys out its switch. Install the app build
+            (APK) to use this. In Expo Go, add files with Import instead.
+          </Text>
+        </View>
+      )}
       <Pressable
         onPress={allow}
-        disabled={asking}
-        style={[styles.allow, { backgroundColor: theme.tint }]}>
+        disabled={asking || runningInExpoGo}
+        style={[styles.allow, { backgroundColor: theme.tint, opacity: runningInExpoGo ? 0.4 : 1 }]}>
         {asking ? (
           <ActivityIndicator color="#fff" />
         ) : (
           <Text style={styles.allowText}>Allow access</Text>
         )}
       </Pressable>
-      {usesAllFilesAccess && (
+      {usesAllFilesAccess && !runningInExpoGo && (
         <Text style={[styles.hint, { color: theme.textSecondary }]}>
           On the next screen, turn on “Allow access to manage all files”, then go back.
         </Text>
@@ -112,6 +121,14 @@ const styles = StyleSheet.create({
     marginTop: Spacing.two,
   },
   allowText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  notice: {
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    gap: Spacing.two,
+    padding: Spacing.three,
+    borderRadius: Radius.md,
+  },
+  noticeText: { flex: 1, fontSize: 14, lineHeight: 20 },
   hint: { fontSize: 13, textAlign: 'center' },
   skip: { fontSize: 16, fontWeight: '600', padding: Spacing.two },
 });
