@@ -130,8 +130,15 @@ export async function importDocument(
   name: string,
   kind: DocumentKind = 'pdf',
 ): Promise<PdfDocument> {
-  // Read and write rather than File.copy, which cannot copy from content:// URIs.
-  return createDocument(name, await new File(sourceUri).bytes(), kind);
+  // Native streaming copy (also from Android content:// URIs): the file never
+  // passes through JS memory, so large files (hundreds of MB) import fine.
+  const target = uniqueFile(name, kind);
+  const source = new File(sourceUri);
+  // A temporary copy made by the picker (iOS cache) is moved rather than copied,
+  // so the file doesn't take up storage twice.
+  if (sourceUri.startsWith(Paths.cache.uri)) await source.move(target);
+  else await source.copy(target);
+  return toDocument(target);
 }
 
 export async function createDocument(
@@ -310,19 +317,23 @@ export function detectKind(name: string, bytes: Uint8Array): DocumentKind | null
 /** Imports a file another app opened with this one (e.g. "Open with" from WhatsApp). */
 export async function importSharedFile(uri: string): Promise<PdfDocument> {
   const file = new File(uri);
-  const bytes = await file.bytes();
   let name = '';
   try {
     name = decodeURIComponent(file.name);
   } catch {
     name = file.name;
   }
-  const kind = detectKind(name, bytes);
+  // Only read the contents when the name doesn't tell the type (large files
+  // with a proper extension are copied without being loaded into memory).
+  const kind = kindOf(name) ?? detectKind(name, await file.bytes());
   if (!kind)
     throw new Error('This file type is not supported. Open a PDF, Word, Excel or PowerPoint file.');
   const base = name.replace(EXTENSION, '').replace(/^\d+$/, '') || 'Shared document';
-  return createDocument(base, bytes, kind);
+  return importDocument(uri, base, kind);
 }
+
+/** Files above this size are too large for the editor's viewer; Merge and Split still work. */
+export const LARGE_PDF_BYTES = 80 * 1024 * 1024;
 
 /** Decodes base64 (e.g. from a WebView) into bytes. */
 export function base64ToBytes(base64: string) {
