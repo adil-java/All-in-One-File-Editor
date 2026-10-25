@@ -11,11 +11,9 @@ import { ActivityAction, startActivityAsync } from 'expo-intent-launcher';
 import { PermissionsAndroid, Platform } from 'react-native';
 
 import { type DocumentKind, kindOf } from '@/lib/documents';
+import DeviceDocuments from '../../modules/device-documents';
 
 const STORAGE_ROOT = 'file:///storage/emulated/0';
-
-/** Folders that hold app data or caches rather than the user's documents. */
-const SKIPPED_FOLDERS = new Set(['Android', 'LOST.DIR']);
 
 export type DeviceFile = {
   uri: string;
@@ -87,21 +85,56 @@ export function markStorageAccessAsked() {
   if (!flag.exists) flag.create();
 }
 
-/** Lets the list render between folders while a large storage is scanned. */
-const breathe = () => new Promise((resolve) => setTimeout(resolve, 0));
+const DOCUMENT_EXTENSIONS = ['pdf', 'docx', 'xlsx', 'pptx'];
 
 /**
- * Finds PDF, Word, Excel and PowerPoint files in shared storage, newest first.
- * WhatsApp's documents live under Android/media, so that folder is scanned even
- * though the rest of Android/ is skipped.
+ * Folders where documents usually are, for when the MediaStore index isn't
+ * available. Walking all of storage visits every photo folder and takes minutes.
  */
-export async function scanDeviceFiles(onProgress?: (found: number) => void) {
-  const found: DeviceFile[] = [];
-  const queue: string[] = [STORAGE_ROOT, `${STORAGE_ROOT}/Android/media`];
-  let visited = 0;
+const COMMON_FOLDERS = [
+  'Download',
+  'Documents',
+  'Bluetooth',
+  'Telegram',
+  'WhatsApp/Media/WhatsApp Documents',
+  'Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Documents',
+  'Android/media/com.whatsapp.w4b/WhatsApp Business/Media/WhatsApp Business Documents',
+  'Android/media/org.telegram.messenger/Telegram/Telegram Documents',
+];
 
+/** "Download/Invoices" for a path or URI under the storage root. */
+function folderOf(location: string) {
+  const path = decodeURIComponent(location.replace(/^file:\/\//, ''));
+  const relative = path.slice('/storage/emulated/0/'.length);
+  const folder = relative.slice(0, Math.max(0, relative.lastIndexOf('/')));
+  return folder || 'Phone storage';
+}
+
+/** Asks Android's MediaStore, which has every file in shared storage indexed. */
+async function listFromIndex(): Promise<DeviceFile[]> {
+  const indexed = await DeviceDocuments!.listDocuments(DOCUMENT_EXTENSIONS);
+  const files: DeviceFile[] = [];
+  for (const doc of indexed) {
+    const kind = kindOf(doc.name);
+    if (!kind) continue;
+    files.push({
+      uri: doc.uri,
+      name: doc.name,
+      folder: doc.path ? folderOf(doc.path) : 'Phone storage',
+      kind,
+      size: doc.size,
+      modified: doc.modified,
+    });
+  }
+  return files;
+}
+
+/** Walks the common document folders, a few levels deep. */
+async function listFromCommonFolders(): Promise<DeviceFile[]> {
+  const found: DeviceFile[] = [];
+  const queue = COMMON_FOLDERS.map((folder) => ({ uri: `${STORAGE_ROOT}/${folder}`, depth: 0 }));
   while (queue.length) {
-    const uri = queue.shift()!;
+    const { uri, depth } = queue.shift()!;
     let entries: (File | Directory)[];
     try {
       entries = new Directory(uri).list();
@@ -111,8 +144,7 @@ export async function scanDeviceFiles(onProgress?: (found: number) => void) {
     for (const entry of entries) {
       if (entry.name.startsWith('.')) continue;
       if (entry instanceof Directory) {
-        if (uri === STORAGE_ROOT && SKIPPED_FOLDERS.has(entry.name)) continue;
-        queue.push(entry.uri.replace(/\/$/, ''));
+        if (depth < 3) queue.push({ uri: entry.uri.replace(/\/$/, ''), depth: depth + 1 });
         continue;
       }
       const kind = kindOf(entry.name);
@@ -120,18 +152,41 @@ export async function scanDeviceFiles(onProgress?: (found: number) => void) {
       found.push({
         uri: entry.uri,
         name: entry.name,
-        folder: decodeURIComponent(uri.slice(STORAGE_ROOT.length + 1)) || 'Phone storage',
+        folder: folderOf(entry.uri),
         kind,
         size: entry.size,
         modified: entry.modificationTime ?? 0,
       });
     }
-    if (++visited % 40 === 0) {
-      onProgress?.(found.length);
-      await breathe();
-    }
+    // Lets the screen update between folders.
+    await new Promise((resolve) => setTimeout(resolve, 0));
   }
   return found.sort((a, b) => b.modified - a.modified);
+}
+
+const cacheFile = () => new File(Paths.cache, 'device-files.json');
+
+/** The last list found, so the tab shows files immediately while it refreshes. */
+export function cachedDeviceFiles(): DeviceFile[] | null {
+  try {
+    const file = cacheFile();
+    return file.exists ? (JSON.parse(file.textSync()) as DeviceFile[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Finds PDF, Word, Excel and PowerPoint files on the phone, newest first. */
+export async function findDeviceFiles(): Promise<DeviceFile[]> {
+  const files = DeviceDocuments ? await listFromIndex() : await listFromCommonFolders();
+  try {
+    const file = cacheFile();
+    if (!file.exists) file.create();
+    file.write(JSON.stringify(files));
+  } catch {
+    // The cache only speeds up the next visit.
+  }
+  return files;
 }
 
 /** The file's own folder name for display, e.g. "Download" or "WhatsApp Documents". */

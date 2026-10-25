@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   AppState,
@@ -22,9 +22,10 @@ import { FILE_BADGES } from '@/constants/file-badges';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import {
+  cachedDeviceFiles,
   type DeviceFile,
+  findDeviceFiles,
   hasStorageAccess,
-  scanDeviceFiles,
   shortFolder,
 } from '@/lib/device-files';
 import {
@@ -57,24 +58,31 @@ async function openDeviceFile(file: DeviceFile) {
 export default function DeviceScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  // null while checking.
-  const [access, setAccess] = useState<boolean | null>(null);
-  const [files, setFiles] = useState<DeviceFile[] | null>(null);
-  const [found, setFound] = useState(0);
+  // Starts with the list from last time, so files show right away on reopening.
+  const [files, setFiles] = useState<DeviceFile[] | null>(cachedDeviceFiles);
+  // null while checking; a saved list means access was allowed before.
+  const [access, setAccess] = useState<boolean | null>(() => (files ? true : null));
   const [scanning, setScanning] = useState(false);
+  // Only a pull-to-refresh shows the spinner; other refreshes update the list quietly.
+  const [pulling, setPulling] = useState(false);
+  const busy = useRef(false);
   const [filter, setFilter] = useState<DocumentKind | 'all'>('all');
   const [query, setQuery] = useState('');
   const [opening, setOpening] = useState(false);
 
-  const scan = useCallback(async () => {
+  const scan = useCallback(async (pulled = false) => {
+    if (busy.current) return;
+    busy.current = true;
     setScanning(true);
-    setFound(0);
+    if (pulled) setPulling(true);
     try {
-      setFiles(await scanDeviceFiles(setFound));
+      setFiles(await findDeviceFiles());
     } catch (error) {
       toast.error('Could not read your files', errorText(error));
     } finally {
+      busy.current = false;
       setScanning(false);
+      setPulling(false);
     }
   }, []);
 
@@ -101,10 +109,10 @@ export default function DeviceScreen() {
     const subscription = AppState.addEventListener('change', async (state) => {
       if (state !== 'active') return;
       const granted = await checkAccess();
-      if (granted && !files && !scanning) scan();
+      if (granted) scan();
     });
     return () => subscription.remove();
-  }, [checkAccess, scan, files, scanning]);
+  }, [checkAccess, scan]);
 
   const open = async (file: DeviceFile) => {
     setOpening(true);
@@ -203,16 +211,14 @@ export default function DeviceScreen() {
         keyExtractor={(item) => item.uri}
         contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + Spacing.four }]}
         refreshControl={
-          <RefreshControl refreshing={scanning && !!files} onRefresh={scan} colors={[theme.tint]} />
+          <RefreshControl refreshing={pulling} onRefresh={() => scan(true)} colors={[theme.tint]} />
         }
         ListEmptyComponent={
           <View style={styles.empty}>
             {scanning ? (
               <>
                 <ActivityIndicator color={theme.tint} />
-                <Text style={{ color: theme.textSecondary }}>
-                  Looking for documents… {found > 0 ? `${found} found` : ''}
-                </Text>
+                <Text style={{ color: theme.textSecondary }}>Looking for documents…</Text>
               </>
             ) : (
               <Text style={{ color: theme.textSecondary, textAlign: 'center' }}>

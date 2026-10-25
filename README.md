@@ -10,7 +10,10 @@ runs on the device with no server and no network connection.
   blank PDFs, and rename, duplicate, share or delete documents.
 - **Phone tab (Android)**: after you allow file access, lists every PDF, Word, Excel and
   PowerPoint file on the phone (Download, Documents, WhatsApp and more) with search and
-  type filters. Tap a file to open it. The app asks for access on first launch.
+  type filters. Tap a file to open it. The app asks for access on first launch. Files
+  come from Android's MediaStore index through a small local native module
+  (`modules/device-documents`), so the list appears in about a second, and the last
+  list is shown straight away when you come back.
 - **Open from other apps**: choose the app in "Open with" (Android) or the share sheet (iOS)
   from WhatsApp, Files, email and so on. The file is added to the library and opened.
   This needs a real build (EAS); Expo Go can't register file types.
