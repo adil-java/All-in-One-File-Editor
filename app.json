@@ -38,10 +38,7 @@
       "intentFilters": [
         {
           "action": "VIEW",
-          "category": [
-            "DEFAULT",
-            "BROWSABLE"
-          ],
+          "category": ["DEFAULT", "BROWSABLE"],
           "data": [
             {
               "scheme": "content",
@@ -77,7 +74,8 @@
             }
           ]
         }
-      ]
+      ],
+      "permissions": ["android.permission.MANAGE_EXTERNAL_STORAGE"]
     },
     "web": {
       "output": "server",

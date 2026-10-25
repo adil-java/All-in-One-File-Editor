@@ -37,6 +37,10 @@ export default function RootLayout() {
             contentStyle: { backgroundColor: theme.background },
           }}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="storage-access"
+            options={{ headerShown: false, presentation: 'fullScreenModal', animation: 'none' }}
+          />
         </Stack>
         <StatusBar style="auto" />
         <ToastHost />

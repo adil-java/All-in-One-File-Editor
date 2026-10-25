@@ -41,7 +41,7 @@ const SHARE_UTIS: Record<DocumentKind, string> = {
 
 const EXTENSION = /\.(pdf|docx|xlsx|pptx)$/i;
 
-function kindOf(fileName: string): DocumentKind | null {
+export function kindOf(fileName: string): DocumentKind | null {
   const match = EXTENSION.exec(fileName);
   return match ? (match[1].toLowerCase() as DocumentKind) : null;
 }

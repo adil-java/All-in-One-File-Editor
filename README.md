@@ -8,6 +8,9 @@ runs on the device with no server and no network connection.
 
 - **Library**: import PDF, Word (.docx), Excel (.xlsx) and PowerPoint (.pptx) files, create
   blank PDFs, and rename, duplicate, share or delete documents.
+- **Phone tab (Android)**: after you allow file access, lists every PDF, Word, Excel and
+  PowerPoint file on the phone (Download, Documents, WhatsApp and more) with search and
+  type filters. Tap a file to open it. The app asks for access on first launch.
 - **Open from other apps**: choose the app in "Open with" (Android) or the share sheet (iOS)
   from WhatsApp, Files, email and so on. The file is added to the library and opened.
   This needs a real build (EAS); Expo Go can't register file types.
@@ -119,6 +122,9 @@ src/
   single words. The cover box is white, and scanned PDFs have no text to edit.
 - Form edits aren't part of undo/redo.
 - Password-protected PDFs aren't supported.
+- The Phone tab needs "All files access" (`MANAGE_EXTERNAL_STORAGE`), which only works in
+  an installed build, not Expo Go. Google Play reviews apps that request it. iOS doesn't
+  allow browsing the phone's storage, so the tab is Android only.
 - Large files import without size limits, but PDFs over 80 MB open only in Merge and
   Split, not in the editor. Merging or splitting a 200 MB PDF needs roughly 1 GB of free
   memory on the phone.

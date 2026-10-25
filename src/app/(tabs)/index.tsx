@@ -9,6 +9,7 @@ import { SelectionAction } from '@/components/selection-action';
 import { SpeedDial } from '@/components/speed-dial';
 import { TextPromptModal } from '@/components/text-prompt-modal';
 import { errorText, toast } from '@/components/toast';
+import { FILE_BADGES } from '@/constants/file-badges';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { showActionSheet } from '@/lib/action-sheet';
@@ -29,14 +30,6 @@ import {
   type DocumentKind,
   editorRouteFor,
 } from '@/lib/documents';
-
-/** File icon label and color per document kind. */
-const FILE_BADGES: Record<DocumentKind, { label: string; color: string }> = {
-  pdf: { label: 'PDF', color: '#E5383B' },
-  docx: { label: 'DOC', color: '#2B579A' },
-  xlsx: { label: 'XLS', color: '#1D7A45' },
-  pptx: { label: 'PPT', color: '#D35230' },
-};
 
 export default function HomeScreen() {
   const theme = useTheme();

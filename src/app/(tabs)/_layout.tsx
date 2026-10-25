@@ -1,10 +1,27 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Tabs } from 'expo-router';
+import { router, Tabs } from 'expo-router';
+import { useEffect } from 'react';
 
 import { useTheme } from '@/hooks/use-theme';
+import {
+  hasStorageAccess,
+  markStorageAccessAsked,
+  storageAccessAsked,
+  storageAccessSupported,
+} from '@/lib/device-files';
 
 export default function TabsLayout() {
   const theme = useTheme();
+
+  // On first launch, ask for file access the way file manager apps do.
+  useEffect(() => {
+    if (!storageAccessSupported || storageAccessAsked()) return;
+    markStorageAccessAsked();
+    hasStorageAccess().then((granted) => {
+      if (!granted) router.push('/storage-access');
+    });
+  }, []);
+
   return (
     <Tabs
       screenOptions={{
@@ -21,6 +38,17 @@ export default function TabsLayout() {
           title: 'Files',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="folder-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="device"
+        options={{
+          title: 'Phone',
+          // iOS apps can't browse the phone's storage; files come in through the picker.
+          href: storageAccessSupported ? undefined : null,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="phone-portrait-outline" size={size} color={color} />
           ),
         }}
       />
