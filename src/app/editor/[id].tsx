@@ -43,6 +43,8 @@ import {
   readDocumentBase64,
   shareBytes,
   shareDocument,
+  formatSize,
+  LARGE_PDF_BYTES,
 } from '@/lib/documents';
 import { pagesFromSource, useEditorHistory } from '@/lib/editor/history';
 import { defaultToolSettings, isDrawingTool, type ToolSettings } from '@/lib/editor/tools';
@@ -71,6 +73,8 @@ export default function EditorScreen() {
   const theme = useTheme();
   const { width: windowWidth } = useWindowDimensions();
   const [doc] = useState(() => getDocument(id));
+  // The viewer loads the whole file into its WebView, which very large PDFs don't fit.
+  const tooLarge = !!doc && doc.size > LARGE_PDF_BYTES;
   const [base64, setBase64] = useState<string | null>(null);
   const history = useEditorHistory();
   const { pages, dispatch } = history;
@@ -430,8 +434,8 @@ export default function EditorScreen() {
   };
 
   useEffect(() => {
-    if (doc) readDocumentBase64(doc.id).then(setBase64);
-  }, [doc]);
+    if (doc && !tooLarge) readDocumentBase64(doc.id).then(setBase64);
+  }, [doc, tooLarge]);
 
   useEffect(() => {
     if (!base64) return;
@@ -538,6 +542,32 @@ export default function EditorScreen() {
         {renderer.element}
         {!doc ? (
           <Text style={[styles.message, { color: theme.textSecondary }]}>Document not found</Text>
+        ) : tooLarge ? (
+          <View style={styles.tooLarge}>
+            <Text style={[styles.tooLargeTitle, { color: theme.text }]}>
+              This PDF is too large to edit here ({formatSize(doc.size)})
+            </Text>
+            <Text style={[styles.tooLargeBody, { color: theme.textSecondary }]}>
+              You can still split it into smaller PDFs, extract pages, or merge it with other files.
+            </Text>
+            <Pressable
+              onPress={() => router.replace({ pathname: '/tools/split', params: { id: doc.id } })}
+              style={[styles.tooLargeButton, { backgroundColor: theme.tint }]}>
+              <Text style={styles.tooLargeButtonText}>Split or extract pages</Text>
+            </Pressable>
+            <Pressable
+              onPress={() =>
+                router.replace({
+                  pathname: '/tools/merge',
+                  params: { ids: encodeURIComponent(doc.id) },
+                })
+              }
+              style={[styles.tooLargeButton, { backgroundColor: theme.backgroundSelected }]}>
+              <Text style={[styles.tooLargeButtonText, { color: theme.text }]}>
+                Merge with other PDFs
+              </Text>
+            </Pressable>
+          </View>
         ) : renderer.status === 'error' ? (
           <Text style={[styles.message, { color: theme.danger }]}>
             Could not open this PDF: {renderer.error}
@@ -729,6 +759,11 @@ function HeaderButton({
 }
 
 const styles = StyleSheet.create({
+  tooLarge: { flex: 1, justifyContent: 'center', padding: Spacing.four, gap: Spacing.three },
+  tooLargeTitle: { fontSize: 18, fontWeight: '700', textAlign: 'center' },
+  tooLargeBody: { fontSize: 15, textAlign: 'center', marginBottom: Spacing.two },
+  tooLargeButton: { paddingVertical: Spacing.three, borderRadius: 12, alignItems: 'center' },
+  tooLargeButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   container: { flex: 1 },
   list: { padding: Spacing.three, gap: Spacing.three, alignItems: 'center' },
   message: { flex: 1, textAlign: 'center', textAlignVertical: 'center', padding: Spacing.four },

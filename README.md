@@ -39,6 +39,11 @@ runs on the device with no server and no network connection.
 - **Images**: insert photos from your library.
 - **Pages**: rotate, reorder, duplicate and delete pages, insert blank pages, and merge
   in another PDF.
+- **Merge PDFs**: combine two or more PDFs, choosing the pages to take from each
+  (e.g. `1-170, 200-end`). "Insert PDF after page…" puts a whole PDF in the middle of
+  another one, e.g. a 7-page PDF after page 170 of a 516-page PDF.
+- **Split PDF**: cut a PDF by page ranges (one file per range), into parts of N pages,
+  or extract chosen pages into a single PDF.
 - **Save**: write edits into the file, save them as a copy, or share the edited PDF.
   If you leave with unsaved changes, the app asks whether to save or discard them.
 
@@ -114,6 +119,9 @@ src/
   single words. The cover box is white, and scanned PDFs have no text to edit.
 - Form edits aren't part of undo/redo.
 - Password-protected PDFs aren't supported.
+- Large files import without size limits, but PDFs over 80 MB open only in Merge and
+  Split, not in the editor. Merging or splitting a 200 MB PDF needs roughly 1 GB of free
+  memory on the phone.
 - Word support keeps content and basic formatting (headings, bold/italic/underline, lists,
   tables, images, alignment), not exact Word layout: custom fonts, colors, text boxes,
   headers and footers are lost. Old .doc, .xls and .ppt files aren't supported.

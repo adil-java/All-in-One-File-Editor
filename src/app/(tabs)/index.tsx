@@ -144,6 +144,18 @@ export default function HomeScreen() {
     });
   };
 
+  /** Opens Merge with these PDFs already listed (in this order). */
+  const openMerge = (docs: PdfDocument[] = []) =>
+    router.push({
+      pathname: '/tools/merge',
+      params: { ids: docs.map((d) => encodeURIComponent(d.id)).join(',') },
+    });
+  const openSplit = (doc?: PdfDocument) =>
+    router.push({ pathname: '/tools/split', params: doc ? { id: doc.id } : {} });
+
+  const selectedPdfs = selectedDocs.filter((d) => d.kind === 'pdf');
+  const canMergeSelection = selectedDocs.length >= 2 && selectedPdfs.length === selectedDocs.length;
+
   const showActions = (doc: PdfDocument) =>
     showActionSheet(doc.name, [
       {
@@ -151,6 +163,16 @@ export default function HomeScreen() {
         icon: 'checkmark-circle-outline',
         onPress: () => setSelected(new Set([doc.id])),
       },
+      ...(doc.kind === 'pdf'
+        ? [
+            {
+              label: 'Merge with other PDFs',
+              icon: 'git-merge-outline' as const,
+              onPress: () => openMerge([doc]),
+            },
+            { label: 'Split', icon: 'cut-outline' as const, onPress: () => openSplit(doc) },
+          ]
+        : []),
       { label: 'Rename', icon: 'create-outline', onPress: () => setRenaming(doc) },
       {
         label: 'Duplicate',
@@ -269,6 +291,18 @@ export default function HomeScreen() {
             },
           ]}>
           {/* Same actions as a file's menu, applied to every selected file. */}
+          {canMergeSelection && (
+            <SelectionAction
+              icon="git-merge-outline"
+              label="Merge"
+              onPress={() => {
+                // Keep the on-screen order of the selected PDFs.
+                const docs = selectedPdfs;
+                setSelected(null);
+                openMerge(docs);
+              }}
+            />
+          )}
           <SelectionAction
             icon="share-outline"
             label="Share"
@@ -328,6 +362,18 @@ export default function HomeScreen() {
               icon: 'easel',
               color: '#D35230',
               onPress: () => createNew('pptx'),
+            },
+            {
+              label: 'Merge PDFs',
+              icon: 'git-merge',
+              color: '#7A4FD8',
+              onPress: () => openMerge(),
+            },
+            {
+              label: 'Split PDF',
+              icon: 'cut',
+              color: '#0E8A9A',
+              onPress: () => openSplit(),
             },
           ]}
         />
